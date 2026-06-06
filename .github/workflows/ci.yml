@@ -18,12 +18,12 @@ jobs:
       matrix:
         build_type: [Release]
         config:
-          - name: "Windows/MSVC"
+          - name: "Windows / MSVC"
             os: windows-latest
             c_compiler: cl
             cxx_compiler: cl
  
-          - name: "Linux/GCC"
+          - name: "Linux / GCC"
             os: ubuntu-latest
             c_compiler: gcc
             cxx_compiler: g++
