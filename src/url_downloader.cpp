@@ -30,8 +30,8 @@ int main(int argc, char* argv[]) {
 
         exit(EXIT_FAILURE);
     }
-    auto urls_path = std::filesystem::path::path(argv[1]);
-    auto out_dir_path = std::filesystem::path::path(argv[2]);
+    auto urls_path = std::filesystem::path(argv[1]);
+    auto out_dir_path = std::filesystem::path(argv[2]);
     auto parallel_download_count = std::stoi(std::string(argv[3]));
 
     auto urls = read_lines(urls_path);
