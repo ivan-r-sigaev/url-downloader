@@ -1,0 +1,61 @@
+# Builds url downloader with Windows/MSCV and Linux/GCC.
+
+name: CI
+ 
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+ 
+jobs:
+  build:
+    name: ${{ matrix.config.name }}
+    runs-on: ${{ matrix.config.os }}
+ 
+    strategy:
+      fail-fast: false
+      matrix:
+        config:
+          - name: "Windows/MSVC"
+            os: windows-latest
+            cc: cl
+            cxx: cl
+            cmake_generator: "Visual Studio 17 2022"
+            cmake_arch: "-A x64"
+ 
+          - name: "Linux/GCC"
+            os: ubuntu-latest
+            cc: gcc
+            cxx: g++
+            cmake_generator: "Ninja"
+            cmake_arch: ""
+ 
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+ 
+      - name: Setup (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y gcc g++ ninja-build
+ 
+      - name: Setup (Windows)
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+ 
+      - name: Configure CMake
+        env:
+          CC: ${{ matrix.config.cc }}
+          CXX: ${{ matrix.config.cxx }}
+        run: >
+          cmake -S . -B build
+          -G "${{ matrix.config.cmake_generator }}"
+          ${{ matrix.config.cmake_arch }}
+          -DCMAKE_BUILD_TYPE=Release
+ 
+      - name: Build
+        run: cmake --build build --config Release --parallel
