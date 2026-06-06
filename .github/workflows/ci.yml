@@ -16,20 +16,17 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        build_type: [Release]
         config:
           - name: "Windows/MSVC"
             os: windows-latest
-            cc: cl
-            cxx: cl
-            cmake_generator: "Visual Studio 17 2022"
-            cmake_arch: "-A x64"
+            c_compiler: cl
+            cxx_compiler: cl
  
           - name: "Linux/GCC"
             os: ubuntu-latest
-            cc: gcc
-            cxx: g++
-            cmake_generator: "Ninja"
-            cmake_arch: ""
+            c_compiler: gcc
+            cxx_compiler: g++
  
     steps:
       - name: Checkout repository
@@ -41,21 +38,13 @@ jobs:
           sudo apt-get update -y
           sudo apt-get install -y gcc g++ ninja-build
  
-      - name: Setup (Windows)
-        if: runner.os == 'Windows'
-        uses: ilammy/msvc-dev-cmd@v1
-        with:
-          arch: x64
- 
       - name: Configure CMake
-        env:
-          CC: ${{ matrix.config.cc }}
-          CXX: ${{ matrix.config.cxx }}
         run: >
-          cmake -S . -B build
-          -G "${{ matrix.config.cmake_generator }}"
-          ${{ matrix.config.cmake_arch }}
-          -DCMAKE_BUILD_TYPE=Release
+          cmake -S ${{ github.workspace }}
+          -B ${{ github.workspace }}/build
+          -DCMAKE_C_COMPILER=${{ matrix.config.c_compiler }}
+          -DCMAKE_CXX_COMPILER=${{ matrix.config.cxx_compiler }}
+          -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
  
       - name: Build
-        run: cmake --build build --config Release --parallel
+        run: cmake --build ${{ github.workspace }}/build --config ${{ matrix.build_type }} --parallel
