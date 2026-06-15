@@ -146,8 +146,8 @@ static std::vector<std::string> read_urls(const std::filesystem::path& urls_path
             continue;
         }
         // Skip non-HTTP/HTTPS protocols.
-        if (line.rfind("https://", 0) != 0 || line.rfind("http://", 0) != 0) {
-            std::cerr 
+        if (line.rfind("https://", 0) != 0 && line.rfind("http://", 0) != 0) {
+            std::cerr
                 << "Warning: URL skipped; Reason: unknown protocol, must be HTTP/HTTPS; URL: "
                 << line
                 << '\n';
