@@ -114,29 +114,33 @@ int main(int argc, char* argv[]) {
         << "; parallel-download-count: " << parallel_download_count
         << std::endl;
 
-    auto handles = std::vector<DownloadHandle>();
     CURLM* multi_handle = curl_multi_init();
     assert_nonnull_curl(multi_handle);
     assert_multi_curl(curl_multi_setopt(multi_handle, CURLMOPT_MAX_TOTAL_CONNECTIONS, (long)parallel_download_count));
-    for (const auto& url : read_urls(urls_path)) {
-        auto out_path = out_dir_path;
-        out_path /= filename_from_url(url);
-        
-        auto url_handle = curl_url();
-        assert_nonnull_curl(url_handle);
-        assert_url_curl(curl_url_set(url_handle, CURLUPART_URL, url.c_str(), 0));
-
-        handles.emplace_back(url, url_handle, out_path);
-
-        auto easy_handle = curl_easy_init();
-        assert_nonnull_curl(easy_handle);
-        assert_easy_curl(curl_easy_setopt(easy_handle, CURLOPT_CURLU, url_handle));
-        assert_easy_curl(curl_easy_setopt(easy_handle, CURLOPT_WRITEFUNCTION, write_callback));
-        assert_easy_curl(curl_easy_setopt(easy_handle, CURLOPT_HEADERFUNCTION, header_callback));
-        assert_easy_curl(curl_easy_setopt(easy_handle, CURLOPT_WRITEDATA, &handles.back()));
-        assert_easy_curl(curl_easy_setopt(easy_handle, CURLOPT_HEADERDATA, &handles.back()));
-        assert_easy_curl(curl_easy_setopt(easy_handle, CURLOPT_PRIVATE, &handles.back()));
-        assert_multi_curl(curl_multi_add_handle(multi_handle, easy_handle));
+    auto handles = std::vector<DownloadHandle>();
+    {
+        auto urls = read_urls(urls_path);
+        handles.reserve(urls.size());  // `handles` must not be reallocated
+        for (const auto& url : urls) {
+            auto out_path = out_dir_path;
+            out_path /= filename_from_url(url);
+            
+            auto url_handle = curl_url();
+            assert_nonnull_curl(url_handle);
+            assert_url_curl(curl_url_set(url_handle, CURLUPART_URL, url.c_str(), 0));
+    
+            auto handle = static_cast<void*>(&handles.emplace_back(url, url_handle, out_path));
+    
+            auto easy_handle = curl_easy_init();
+            assert_nonnull_curl(easy_handle);
+            assert_easy_curl(curl_easy_setopt(easy_handle, CURLOPT_CURLU, url_handle));
+            assert_easy_curl(curl_easy_setopt(easy_handle, CURLOPT_WRITEFUNCTION, &write_callback));
+            assert_easy_curl(curl_easy_setopt(easy_handle, CURLOPT_HEADERFUNCTION, &header_callback));
+            assert_easy_curl(curl_easy_setopt(easy_handle, CURLOPT_WRITEDATA, handle));
+            assert_easy_curl(curl_easy_setopt(easy_handle, CURLOPT_HEADERDATA, handle));
+            assert_easy_curl(curl_easy_setopt(easy_handle, CURLOPT_PRIVATE, handle));
+            assert_multi_curl(curl_multi_add_handle(multi_handle, easy_handle));
+        }
     }
     
     int running_handles_count = 0;
@@ -145,8 +149,8 @@ int main(int argc, char* argv[]) {
         assert_multi_curl(curl_multi_wait(multi_handle, nullptr, 0, 1000, nullptr));
 
         while (true) {
-            int msgsLeft = 0;
-            CURLMsg* msg = curl_multi_info_read(multi_handle, &msgsLeft);
+            int msgs_left = 0;
+            CURLMsg* msg = curl_multi_info_read(multi_handle, &msgs_left);
             if (msg == nullptr) {
                 break;
             }
