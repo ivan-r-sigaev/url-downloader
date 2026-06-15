@@ -44,7 +44,7 @@ void _assert_easy_curl(CURLcode code, int line) {
     if (code != CURLE_OK) {
         std::cerr 
             << current_time_to_string() 
-            << " Error: libcurl easy error, aborting;"
+            << " Error: libcurl easy error, aborting"
             << " Message: " << curl_easy_strerror(code)
             << " Line: " << line
             << '\n';
@@ -57,7 +57,7 @@ void _assert_multi_curl(CURLMcode code, int line) {
     if (code != CURLE_OK) {
         std::cerr
             << current_time_to_string() 
-            << " Error: libcurl multi error, aborting;"
+            << " Error: libcurl multi error, aborting"
             << " Message: " << curl_multi_strerror(code)
             << " Line: " << line
             << '\n';
@@ -70,8 +70,20 @@ void _assert_url_curl(CURLUcode code, int line) {
     if (code != CURLE_OK) {
         std::cerr
             << current_time_to_string() 
-            << " Error: libcurl url error, aborting;"
+            << " Error: libcurl url error, aborting"
             << " Message: " << curl_url_strerror(code)
+            << " Line: " << line
+            << '\n';
+        std::abort();
+    }
+}
+
+#define assert_nonnull_curl(ptr) _assert_nonnull_curl(ptr, __LINE__)
+void _assert_nonnull_curl(void* ptr, int line) {
+    if (ptr == nullptr) {
+        std::cerr
+            << current_time_to_string()
+            << " Error: internal libcurl error, aborting"
             << " Line: " << line
             << '\n';
         std::abort();
@@ -104,18 +116,20 @@ int main(int argc, char* argv[]) {
 
     auto handles = std::vector<DownloadHandle>();
     CURLM* multi_handle = curl_multi_init();
-    // assert(multi_handle);
+    assert_nonnull_curl(multi_handle);
     assert_multi_curl(curl_multi_setopt(multi_handle, CURLMOPT_MAX_TOTAL_CONNECTIONS, (long)parallel_download_count));
     for (const auto& url : read_urls(urls_path)) {
         auto out_path = out_dir_path;
         out_path.append(filename_from_url(url));
         
         auto url_handle = curl_url();
+        assert_nonnull_curl(url_handle);
         assert_url_curl(curl_url_set(url_handle, CURLUPART_URL, url.c_str(), 0));
 
         handles.emplace_back(url, url_handle, out_path);
 
         auto easy_handle = curl_easy_init();
+        assert_nonnull_curl(easy_handle);
         assert_easy_curl(curl_easy_setopt(easy_handle, CURLOPT_CURLU, url_handle));
         assert_easy_curl(curl_easy_setopt(easy_handle, CURLOPT_WRITEFUNCTION, write_callback));
         assert_easy_curl(curl_easy_setopt(easy_handle, CURLOPT_HEADERFUNCTION, header_callback));
@@ -133,7 +147,7 @@ int main(int argc, char* argv[]) {
         while (true) {
             int msgsLeft = 0;
             CURLMsg* msg = curl_multi_info_read(multi_handle, &msgsLeft);
-            if (!msg) {
+            if (msg == nullptr) {
                 break;
             }
             if (msg->msg == CURLMSG_DONE) {
