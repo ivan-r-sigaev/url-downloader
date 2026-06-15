@@ -120,7 +120,7 @@ int main(int argc, char* argv[]) {
     assert_multi_curl(curl_multi_setopt(multi_handle, CURLMOPT_MAX_TOTAL_CONNECTIONS, (long)parallel_download_count));
     for (const auto& url : read_urls(urls_path)) {
         auto out_path = out_dir_path;
-        out_path.append(filename_from_url(url));
+        out_path /= filename_from_url(url);
         
         auto url_handle = curl_url();
         assert_nonnull_curl(url_handle);
@@ -326,7 +326,7 @@ static void decode_url(std::string& text) {
 static std::string filename_from_url(const std::string& url) {
     auto out = url.substr(0, url.find('#'));
     out = out.substr(0, out.find('?'));
-    out = out.substr(out.rfind('/'));
+    out = out.substr((std::min)(out.rfind('/') + 1, out.length()));
     if (out.empty()) {
         out = "placeholder.txt";
     } else {
