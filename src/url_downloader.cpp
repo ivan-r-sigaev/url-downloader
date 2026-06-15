@@ -34,10 +34,37 @@ static void decode_url(std::string& text);
 static std::string filename_from_url(const std::string& url);
 static void print_usage(std::string command_name);
 
+#define assert_easy_curl(code) _assert_easy_curl(code, __LINE__)
+void _assert_easy_curl(CURLcode code, int line) {
+    if (code != CURLE_OK) {
+        std::cerr 
+            << current_time_to_string() 
+            << " Error: libcurl easy error, aborting;"
+            << " Message: " << curl_easy_strerror(code)
+            << " Line: " << line
+            << '\n';
+        std::abort();
+    }
+}
+
+#define assert_multi_curl(code) _assert_multi_curl(code, __LINE__)
+void _assert_multi_curl(CURLMcode code, int line) {
+    if (code != CURLE_OK) {
+        std::cerr
+            << current_time_to_string() 
+            << " Error: libcurl multi error, aborting;"
+            << " Message: " << curl_multi_strerror(code)
+            << " Line: " << line
+            << '\n';
+        std::abort();
+    }
+}
+
 int main(int argc, char* argv[]) {
     std::cout << current_time_to_string() << " Url Downloader Started" << std::endl;
 
-    curl_global_init(CURL_GLOBAL_ALL);
+    assert_easy_curl(curl_global_init(CURL_GLOBAL_ALL));
+    
 
     std::string command_name = argc >= 1 ? std::string(argv[0]) : "url_downloader";
     
@@ -59,26 +86,27 @@ int main(int argc, char* argv[]) {
 
     auto handles = std::vector<DownloadHandle>();
     CURLM* multi_handle = curl_multi_init();
-    curl_multi_setopt(multi_handle, CURLMOPT_MAX_TOTAL_CONNECTIONS, (long)parallel_download_count);
+    // assert(multi_handle);
+    assert_multi_curl(curl_multi_setopt(multi_handle, CURLMOPT_MAX_TOTAL_CONNECTIONS, (long)parallel_download_count));
     for (const auto& url : read_urls(urls_path)) {
         auto out_path = out_dir_path;
         out_path.append(filename_from_url(url));
 
         handles.emplace_back(url, out_path);
         auto easy_handle = curl_easy_init();
-        curl_easy_setopt(easy_handle, CURLOPT_URL, url.c_str());
-        curl_easy_setopt(easy_handle, CURLOPT_WRITEFUNCTION, write_callback);
-        curl_easy_setopt(easy_handle, CURLOPT_HEADERFUNCTION, header_callback);
-        curl_easy_setopt(easy_handle, CURLOPT_WRITEDATA, &handles.back());
-        curl_easy_setopt(easy_handle, CURLOPT_HEADERDATA, &handles.back());
-        curl_easy_setopt(easy_handle, CURLOPT_PRIVATE, &handles.back());
-        curl_multi_add_handle(multi_handle, easy_handle);
+        assert_easy_curl(curl_easy_setopt(easy_handle, CURLOPT_URL, url.c_str()));
+        assert_easy_curl(curl_easy_setopt(easy_handle, CURLOPT_WRITEFUNCTION, write_callback));
+        assert_easy_curl(curl_easy_setopt(easy_handle, CURLOPT_HEADERFUNCTION, header_callback));
+        assert_easy_curl(curl_easy_setopt(easy_handle, CURLOPT_WRITEDATA, &handles.back()));
+        assert_easy_curl(curl_easy_setopt(easy_handle, CURLOPT_HEADERDATA, &handles.back()));
+        assert_easy_curl(curl_easy_setopt(easy_handle, CURLOPT_PRIVATE, &handles.back()));
+        assert_multi_curl(curl_multi_add_handle(multi_handle, easy_handle));
     }
     
     int running_handles_count = 0;
     do {
-        curl_multi_perform(multi_handle, &running_handles_count);
-        curl_multi_wait(multi_handle, nullptr, 0, 1000, nullptr);
+        assert_multi_curl(curl_multi_perform(multi_handle, &running_handles_count));
+        assert_multi_curl(curl_multi_wait(multi_handle, nullptr, 0, 1000, nullptr));
 
         while (true) {
             int msgsLeft = 0;
@@ -88,14 +116,15 @@ int main(int argc, char* argv[]) {
             }
             if (msg->msg == CURLMSG_DONE) {
                 // auto result = msg->data.result;
+                assert_easy_curl(msg->data.result);
                 auto now = std::chrono::steady_clock::now();
                 auto easy_handle = msg->easy_handle;
                 long http_code = 0;
                 DownloadHandle* handle = nullptr;
-                curl_easy_getinfo(easy_handle, CURLINFO_RESPONSE_CODE, &http_code);
-                curl_easy_getinfo(easy_handle, CURLINFO_PRIVATE, &handle);
+                assert_easy_curl(curl_easy_getinfo(easy_handle, CURLINFO_RESPONSE_CODE, &http_code));
+                assert_easy_curl(curl_easy_getinfo(easy_handle, CURLINFO_PRIVATE, &handle));
                 handle->out_file.close();
-                curl_multi_remove_handle(multi_handle, easy_handle);
+                assert_multi_curl(curl_multi_remove_handle(multi_handle, easy_handle));
                 curl_easy_cleanup(easy_handle);
                 if (http_code != 200) {
                     std::cerr 
@@ -113,7 +142,7 @@ int main(int argc, char* argv[]) {
         }
     } while (running_handles_count > 0);
 
-    curl_multi_cleanup(multi_handle);
+    assert_multi_curl(curl_multi_cleanup(multi_handle));
     curl_global_cleanup();
 
     std::cout << current_time_to_string() << " Url Downloader Finished" << std::endl;
