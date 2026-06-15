@@ -15,13 +15,18 @@
 /// Handle to manage an instance of downloading a file from URL.
 class DownloadHandle {
 public:
-    std::string url{};
+    std::string url;
+    CURLU* url_handle;
     std::filesystem::path out_path{};
     std::ofstream out_file{};
     bool has_started = false;
     std::chrono::steady_clock::time_point start_time{};
 
-    explicit DownloadHandle(std::string _url, std::filesystem::path _out_path) : url(_url), out_path(_out_path) {}
+    explicit DownloadHandle(
+        std::string _url,
+        CURLU* _url_handle,
+        std::filesystem::path _out_path
+    ) : url(_url), url_handle(_url_handle), out_path(_out_path) {}
 };
 
 static std::string current_time_to_string();
@@ -60,6 +65,19 @@ void _assert_multi_curl(CURLMcode code, int line) {
     }
 }
 
+#define assert_url_curl(code) _assert_url_curl(code, __LINE__)
+void _assert_url_curl(CURLUcode code, int line) {
+    if (code != CURLE_OK) {
+        std::cerr
+            << current_time_to_string() 
+            << " Error: libcurl url error, aborting;"
+            << " Message: " << curl_url_strerror(code)
+            << " Line: " << line
+            << '\n';
+        std::abort();
+    }
+}
+
 int main(int argc, char* argv[]) {
     std::cout << current_time_to_string() << " Url Downloader Started" << std::endl;
 
@@ -91,10 +109,14 @@ int main(int argc, char* argv[]) {
     for (const auto& url : read_urls(urls_path)) {
         auto out_path = out_dir_path;
         out_path.append(filename_from_url(url));
+        
+        auto url_handle = curl_url();
+        assert_url_curl(curl_url_set(url_handle, CURLUPART_URL, url.c_str(), 0));
 
-        handles.emplace_back(url, out_path);
+        handles.emplace_back(url, url_handle, out_path);
+
         auto easy_handle = curl_easy_init();
-        assert_easy_curl(curl_easy_setopt(easy_handle, CURLOPT_URL, url.c_str()));
+        assert_easy_curl(curl_easy_setopt(easy_handle, CURLOPT_CURLU, url_handle));
         assert_easy_curl(curl_easy_setopt(easy_handle, CURLOPT_WRITEFUNCTION, write_callback));
         assert_easy_curl(curl_easy_setopt(easy_handle, CURLOPT_HEADERFUNCTION, header_callback));
         assert_easy_curl(curl_easy_setopt(easy_handle, CURLOPT_WRITEDATA, &handles.back()));
@@ -115,7 +137,6 @@ int main(int argc, char* argv[]) {
                 break;
             }
             if (msg->msg == CURLMSG_DONE) {
-                // auto result = msg->data.result;
                 assert_easy_curl(msg->data.result);
                 auto now = std::chrono::steady_clock::now();
                 auto easy_handle = msg->easy_handle;
@@ -125,6 +146,7 @@ int main(int argc, char* argv[]) {
                 assert_easy_curl(curl_easy_getinfo(easy_handle, CURLINFO_PRIVATE, &handle));
                 handle->out_file.close();
                 assert_multi_curl(curl_multi_remove_handle(multi_handle, easy_handle));
+                curl_url_cleanup(handle->url_handle);
                 curl_easy_cleanup(easy_handle);
                 if (http_code != 200) {
                     std::cerr 
@@ -182,6 +204,8 @@ static std::vector<std::string> read_urls(const std::filesystem::path& urls_path
                 << '\n';
             continue;
         }
+        // Trim trailing newline
+        line.pop_back();
         out.push_back(line);
     }
     return out;
