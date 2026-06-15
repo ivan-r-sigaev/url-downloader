@@ -54,7 +54,7 @@ void _assert_easy_curl(CURLcode code, int line) {
 
 #define assert_multi_curl(code) _assert_multi_curl(code, __LINE__)
 void _assert_multi_curl(CURLMcode code, int line) {
-    if (code != CURLE_OK) {
+    if (code != CURLM_OK) {
         std::cerr
             << current_time_to_string() 
             << " Error: libcurl multi error, aborting"
@@ -67,7 +67,7 @@ void _assert_multi_curl(CURLMcode code, int line) {
 
 #define assert_url_curl(code) _assert_url_curl(code, __LINE__)
 void _assert_url_curl(CURLUcode code, int line) {
-    if (code != CURLE_OK) {
+    if (code != CURLUE_OK) {
         std::cerr
             << current_time_to_string() 
             << " Error: libcurl url error, aborting"
