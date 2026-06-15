@@ -292,8 +292,10 @@ static size_t write_callback(char *ptr, size_t size, size_t nmemb, void *userdat
         create_file(handle->out_file, handle->out_path);
     }
 
-    // Should I check success?
-    handle->out_file.write(ptr, nmemb);
+    if (ptr != nullptr && nmemb != 0) {
+        // Should I check success?
+        handle->out_file.write(ptr, nmemb);
+    }
 
     return nmemb;
 }
