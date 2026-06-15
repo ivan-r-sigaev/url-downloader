@@ -157,7 +157,10 @@ int main(int argc, char* argv[]) {
                         << '\n';
                 } else {
                     auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - handle->start_time).count();
-                    std::cout << handle->out_path << "finished downloading -  in " << elapsed << "ms\n";
+                    std::cout
+                        << current_time_to_string()
+                        << " " << handle->out_path
+                        << " - finished downloading in " << elapsed << " ms\n";
                 }
             }
             std::cout << std::flush;
