@@ -1,5 +1,8 @@
 # url-downloader
 
+[![Build Status](https://github.com/ivan-r-sigaev/url-downloader/actions/workflows/ci.yml/badge.svg)](https://github.com/ivan-r-sigaev/url-downloader/actions)
+[![License](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
+
 A simple command line tool to download multiple files from a list of urls.
 
 ## Usage
