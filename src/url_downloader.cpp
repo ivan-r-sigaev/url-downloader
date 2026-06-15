@@ -9,17 +9,36 @@
 #include <curl/curl.h>
 #include <chrono>
 #include <sstream>
+#include <cstdio>
+#include <ctime>
 
 /// Handle to manage an instance of downloading a file from URL.
 class DownloadHandle {
 public:
+    std::string url{};
     std::filesystem::path out_path{};
     std::ofstream out_file{};
     bool has_started = false;
     std::chrono::steady_clock::time_point start_time{};
-public:
-    explicit DownloadHandle(std::filesystem::path _out_path) : out_path(_out_path) {}
+
+    explicit DownloadHandle(std::string _url, std::filesystem::path _out_path) : url(_url), out_path(_out_path) {}
 };
+
+static std::string current_time_to_string() {
+    auto currentTime = std::chrono::system_clock::now();
+    const auto size = 80;
+    char buffer[size];
+    
+    auto transformed = currentTime.time_since_epoch().count() / 1000000;
+    auto millis = transformed % 1000;
+    
+    std::time_t tt = std::chrono::system_clock::to_time_t(currentTime);
+    auto timeinfo = std::localtime(&tt);
+    std::strftime(buffer, size, "%F %H:%M:%S", timeinfo);
+    std::sprintf(buffer, "%s:%03d", buffer, (int)millis);
+    
+    return std::string(buffer);
+}
 
 /// Parses input file into url strings line by line. Empty lines are ignored.
 static std::vector<std::string> read_urls(const std::filesystem::path& urls_path) {
@@ -44,7 +63,7 @@ static std::vector<std::string> read_urls(const std::filesystem::path& urls_path
 }
 
 static void sanitize_filename(std::string& filename) {
-    // TODO: implement this...
+    // May want to sanitize filename here...
 }
 
 static size_t header_callback(char *buffer, size_t size, size_t nitems, void *userdata) {
@@ -53,7 +72,11 @@ static size_t header_callback(char *buffer, size_t size, size_t nitems, void *us
     if (!handle->has_started) {
         handle->start_time = std::chrono::steady_clock::now();
         handle->has_started = true;
-        // TODO: print time...
+        std::cout
+            << current_time_to_string()
+            << " " << handle->url
+            << " - started downloading"
+            << std::endl;
     }
 
     std::string header(buffer, size * nitems);
@@ -84,7 +107,7 @@ static size_t header_callback(char *buffer, size_t size, size_t nitems, void *us
                 }
                 const auto utf8_filename_field = std::string("filename*=");
                 if (token.rfind(utf8_filename_field) != std::string::npos) {
-                    // TODO: implement this...
+                    // TODO: parse utf-8 filename...
                 }
             }
         }
@@ -145,23 +168,31 @@ static std::string filename_from_url(const std::string& url) {
     return out;
 }
 
+static void print_usage(std::string command_name) {
+    std::cerr << "Usage: " << command_name << " <urls_file> <out_dir> <parallel_download_count>\n";
+}
+
 int main(int argc, char* argv[]) {
-    // TODO: print time...
+    std::cout << current_time_to_string() << " Url Downloader Started" << std::endl;
+
     curl_global_init(CURL_GLOBAL_ALL);
 
+    std::string command_name = argc >= 1 ? std::string(argv[0]) : "url_downloader";
+    
     if (argc < 4) {
-        std::string command_name = "url_downloader";
-        if (argc >= 1) {
-            command_name = std::string(argv[0]);
-        }
-        std::cerr << "Usage: " << command_name << " <urls_file> <out_dir> <parallel_download_count>\n";
-
+        print_usage(command_name);
         std::exit(EXIT_FAILURE);
     }
+
     auto urls_path = std::filesystem::path(argv[1]);
     auto out_dir_path = std::filesystem::path(argv[2]);
     auto parallel_download_count = std::stoi(std::string(argv[3]));
-    // TODO: print arguments...
+    std::cout
+        << current_time_to_string()
+        << " urls-path: " << urls_path
+        << "; out-dir: " << out_dir_path
+        << "; parallel-download-count: " << parallel_download_count
+        << std::endl;
 
     auto handles = std::vector<DownloadHandle>();
     CURLM* multi_handle = curl_multi_init();
@@ -172,7 +203,7 @@ int main(int argc, char* argv[]) {
             auto out_path = out_dir_path;
             out_path.append(filename_from_url(url));
 
-            handles.emplace_back(out_path);
+            handles.emplace_back(url, out_path);
             auto easy_handle = curl_easy_init();
             curl_easy_setopt(easy_handle, CURLOPT_URL, url.c_str());
             curl_easy_setopt(easy_handle, CURLOPT_WRITEFUNCTION, write_callback);
@@ -215,7 +246,7 @@ int main(int argc, char* argv[]) {
                         << '\n';
                 } else {
                     auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - handle->start_time).count();
-                    std::cout << handle->out_path << " - finished in " << elapsed << "ms\n";
+                    std::cout << handle->out_path << "finished downloading -  in " << elapsed << "ms\n";
                 }
             }
             std::cout << std::flush;
@@ -225,6 +256,6 @@ int main(int argc, char* argv[]) {
     curl_multi_cleanup(multi_handle);
     curl_global_cleanup();
 
-    // TODO: print time...
+    std::cout << current_time_to_string() << " Url Downloader Finished" << std::endl;
     return 0;
 }
