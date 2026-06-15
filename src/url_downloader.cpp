@@ -233,7 +233,17 @@ static std::vector<std::string> read_urls(const std::filesystem::path& urls_path
 }
 
 static void sanitize_filename(std::string& filename) {
-    // May want to sanitize filename here...
+    std::replace_if(
+        filename.begin(), 
+        filename.end(),
+        [](char c) {
+            const auto forbidden = std::string("\\/:*?\"<>|\t\r\n");
+            return c == '\0'
+                || static_cast<unsigned char>(c) < 32
+                || forbidden.find(c) != std::string::npos;
+        },
+        '_'
+    );
 }
 
 static size_t header_callback(char *buffer, size_t size, size_t nitems, void *userdata) {
