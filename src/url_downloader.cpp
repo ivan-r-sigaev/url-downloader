@@ -286,21 +286,18 @@ static size_t header_callback(char *buffer, size_t size, size_t nitems, void *us
 }
 
 static void create_file(std::ofstream& fs, std::filesystem::path path) {
-    fs.open(path, std::fstream::out | std::fstream::binary);
-    if (!fs.good()) {
-        return;
+    int postfix = 1;
+    std::string name = path.filename().string();
+    size_t delim = name.rfind('.');
+    std::string extension = name.substr(delim);
+    std::string filename = name.substr(0, delim);
+    while (std::filesystem::exists(path)) {
+        path.replace_filename(filename + "(" + std::to_string(postfix) + ")" + extension);
+        postfix++;
     }
 
-    int postfix = 1;
-    std::string filename = path.filename().string();
-    size_t delim = filename.rfind('.');
-    std::string extension = filename.substr(delim);
-    filename = filename.substr(0, delim);
-    do {
-        path.replace_filename(filename + "(" + std::to_string(postfix) + ")" + extension);
-        fs.open(path, std::fstream::out | std::fstream::binary);
-        postfix++;
-    } while (!fs.good());
+    // TODO: should I check success?
+    fs.open(path, std::fstream::out | std::fstream::binary);
 }
 
 static size_t write_callback(char *ptr, size_t size, size_t nmemb, void *userdata) {
@@ -311,7 +308,7 @@ static size_t write_callback(char *ptr, size_t size, size_t nmemb, void *userdat
     }
 
     if (ptr != nullptr && nmemb != 0) {
-        // Should I check success?
+        // TODO: Should I check success?
         handle->out_file.write(ptr, nmemb);
     }
 
