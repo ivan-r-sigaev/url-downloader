@@ -97,8 +97,12 @@ int main(int argc, char* argv[]) {
             }
             auto msg = result.get();
             if (msg->get_message() == CURLMSG_DONE) {
-                // TODO: check result
-                // assert_easy_curl(msg->data.result);
+                if (msg->get_code() != CURLE_OK) {
+                    std::cerr 
+                        << current_time_to_string()
+                        << " internal libcurl error, crashing.";
+                    std::exit(EXIT_FAILURE);
+                }
                 auto now = std::chrono::steady_clock::now();
                 auto easy_handle = msg->get_handler();
                 auto http_code = easy_handle->get_info<CURLINFO_RESPONSE_CODE>().get();
