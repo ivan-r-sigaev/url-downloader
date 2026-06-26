@@ -49,7 +49,6 @@ int main(int argc, char* argv[]) {
     
     if (argc < 4) {
         print_usage(command_name);
-        curl_global_cleanup();
         std::exit(EXIT_FAILURE);
     }
 
