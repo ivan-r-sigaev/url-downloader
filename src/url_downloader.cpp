@@ -279,12 +279,12 @@ static size_t my_write_callback(char *ptr, size_t size, size_t nmemb, void *user
         create_file(handle->out_file, handle->out_path);
     }
 
-    if (ptr != nullptr && nmemb != 0) {
+    if (ptr != nullptr && nmemb * size != 0) {
         // TODO: Should I check success?
-        handle->out_file.write(ptr, nmemb);
+        handle->out_file.write(ptr, nmemb * size);
     }
 
-    return nmemb;
+    return nmemb * size;
 }
 
 static void decode_url(std::string& text) {
