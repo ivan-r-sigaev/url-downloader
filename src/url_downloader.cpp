@@ -214,16 +214,6 @@ static size_t my_header_callback(char *buffer, size_t size, size_t nitems, void 
                 const auto whitespace = " \t";
                 token = token.substr(token.find_first_not_of(whitespace));
                 const auto filename_field = std::string("filename=");
-                if (token.rfind(filename_field, 0) != std::string::npos) {
-                    token = token.substr(filename_field.size());
-                    if (!token.empty() && token[0] == '"' && token.back() == '"') {
-                        token = token.substr(1, token.length() - 2);
-                    }
-                    sanitize_filename(token);
-                    if (!token.empty()) {
-                        handle->out_path.replace_filename(token);
-                    }
-                }
                 const auto utf8_filename_field = std::string("filename*=");
                 if (token.rfind(utf8_filename_field, 0) != std::string::npos) {
                     auto encoded = token.substr(utf8_filename_field.size());
@@ -244,6 +234,15 @@ static size_t my_header_callback(char *buffer, size_t size, size_t nitems, void 
                                 break;
                             }
                         }
+                    }
+                } else if (token.rfind(filename_field, 0) != std::string::npos) {
+                    token = token.substr(filename_field.size());
+                    if (!token.empty() && token[0] == '"' && token.back() == '"') {
+                        token = token.substr(1, token.length() - 2);
+                    }
+                    sanitize_filename(token);
+                    if (!token.empty()) {
+                        handle->out_path.replace_filename(token);
                     }
                 }
             }
