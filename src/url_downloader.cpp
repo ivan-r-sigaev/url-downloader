@@ -29,6 +29,8 @@ public:
     ) : url(_url), out_path(_out_path) {}
 };
 
+class Arguments;
+
 static std::string current_time_to_string();
 static std::vector<std::string> read_urls(const std::filesystem::path& urls_path);
 static void sanitize_filename(std::string& filename);
@@ -37,36 +39,56 @@ static void create_file(std::ofstream& fs, std::filesystem::path path);
 static size_t my_write_callback(void *ptr, size_t size, size_t nmemb, void *userdata);
 static void decode_url(std::string& text);
 static std::string filename_from_url(const std::string& url);
-static void print_usage(std::string command_name);
+static void print_app_start();
+static void print_app_usage(std::string command_name);
+static void print_app_arguments(Arguments args);
+
+// Command line arguments for the program.
+class Arguments {
+public:
+    std::filesystem::path urls_file;
+    std::filesystem::path output_directory;
+    long max_parallel_downloads;
+public:
+    explicit Arguments(
+        std::filesystem::path _urls_file,
+        std::filesystem::path _output_directory,
+        long _max_parallel_downloads
+    ) : 
+        urls_file(_urls_file),
+        output_directory(_output_directory),
+        max_parallel_downloads(_max_parallel_downloads)
+    {}
+    static Arguments parse(int argc, char* argv[]) {
+        std::string command_name = argc >= 1 ? std::string(argv[0]) : "url_downloader";
+
+        if (argc < 4) {
+            print_app_usage(command_name);
+            std::exit(EXIT_FAILURE);
+        }
+
+        auto urls_file = std::filesystem::path(argv[1]);
+        auto output_directory = std::filesystem::path(argv[2]);
+        auto max_parallel_downloads = std::stol(std::string(argv[3]));
+
+        return Arguments(urls_file, output_directory, max_parallel_downloads);
+    }
+};
 
 int main(int argc, char* argv[]) {
-    std::cout << current_time_to_string() << " Url Downloader Started" << std::endl;
+    print_app_start();
 
-    std::string command_name = argc >= 1 ? std::string(argv[0]) : "url_downloader";
-    
-    if (argc < 4) {
-        print_usage(command_name);
-        std::exit(EXIT_FAILURE);
-    }
-
-    auto urls_path = std::filesystem::path(argv[1]);
-    auto out_dir_path = std::filesystem::path(argv[2]);
-    auto parallel_download_count = std::stoi(std::string(argv[3]));
-    std::cout
-        << current_time_to_string()
-        << " urls-path: " << urls_path
-        << "; out-dir: " << out_dir_path
-        << "; parallel-download-count: " << parallel_download_count
-        << std::endl;
+    auto args = Arguments::parse(argc, argv);
+    print_app_arguments(args);
 
     auto multi_handle = curl::curl_multi();
-    multi_handle.add<CURLMOPT_MAX_TOTAL_CONNECTIONS>(static_cast<long>(parallel_download_count));
+    multi_handle.add<CURLMOPT_MAX_TOTAL_CONNECTIONS>(static_cast<long>(args.max_parallel_downloads));
     auto handles = std::vector<DownloadHandle>();
     {
-        auto urls = read_urls(urls_path);
+        auto urls = read_urls(args.urls_file);
         handles.reserve(urls.size());  // `handles` must not be reallocated
         for (const auto& url : urls) {
-            auto out_path = out_dir_path;
+            auto out_path = args.output_directory;
             out_path /= filename_from_url(url);
 
             auto handle = &handles.emplace_back(url, out_path);
@@ -327,6 +349,19 @@ static std::string filename_from_url(const std::string& url) {
     return out;
 }
 
-static void print_usage(std::string command_name) {
+static void print_app_start() {
+    std::cout << current_time_to_string() << " Url Downloader Started" << std::endl;
+}
+
+static void print_app_arguments(Arguments args) {
+    std::cout
+        << current_time_to_string()
+        << " urls-path: " << args.urls_file
+        << "; out-dir: " << args.output_directory
+        << "; parallel-download-count: " << args.max_parallel_downloads
+        << std::endl;
+}
+
+static void print_app_usage(std::string command_name) {
     std::cerr << "Usage: " << command_name << " <urls_file> <out_dir> <parallel_download_count>\n";
 }
