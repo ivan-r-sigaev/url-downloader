@@ -26,21 +26,26 @@ void Printer::print_app_start() {
 void Printer::print_app_arguments(Arguments args) {
     Printer::get().out()
         << current_time_to_string()
-        << " urls-path: " << args.urls_file
-        << "; out-dir: " << args.output_directory
-        << "; parallel-download-count: " << args.max_parallel_downloads
-        << std::endl;
+        << " Arguments: { "
+        << " urls-file-path: `" << args.urls_file << '`'
+        << " ouput-direcotry-path: `" << args.output_directory << '`'
+        << " max-parallel-downloads: " << args.max_parallel_downloads
+        << " }" << std::endl;
 }
 
 void Printer::print_app_usage(std::string command_name) {
-    Printer::get().err() << "Usage: " << command_name << " <urls_file> <out_dir> <parallel_download_count>" << std::endl;
+    Printer::get().err()
+        << current_time_to_string() 
+        << "Usage: " << command_name << " <urls_file> <out_dir> <parallel_download_count>" 
+        << std::endl;
 }
 
 void Printer::print_download_error(const std::string& url, long http_code) {
     Printer::get().err()
-        << "Error: Failed to obtain URL contents; Code: "
-        << http_code 
-        << "; URL: "
+        << current_time_to_string()
+        << " Error: \"Failed to obtain URL contents\""
+        << " Code: " << http_code 
+        << " Url: `" << url << "`"
         << url 
         << std::endl;
 }
@@ -52,8 +57,9 @@ void Printer::print_download_success(
 ) {
     Printer::get().out()
         << current_time_to_string()
-        << " " << output_file_path
+        << " " << url
         << " - finished downloading in " << elapsed.count() << " ms"
+        << " [" << output_file_path << "]"
         << std::endl;
 }
 
@@ -67,21 +73,24 @@ void Printer::print_download_start(const std::string& url) {
 
 void Printer::print_url_skipped(const std::string& url) {
     Printer::get().err()
-        << "Warning: URL skipped; Reason: unknown protocol, must be HTTP/HTTPS; URL: "
-        << url
+        << current_time_to_string()
+        << " Error: \"URL skipped: unknown protocol, must be HTTP/HTTPS\""
+        << " Url: `" << url << '`'
         << std::endl;
 }
-
 
 void Printer::print_libcurl_crash() {
     Printer::get().err() 
         << current_time_to_string()
-        << " internal libcurl error, crashing."
+        << " Error: \"internal libcurl error, crashing\""
         << std::endl;
 }
 
 void Printer::print_app_finish() {
-    Printer::get().out() << current_time_to_string() << " Url Downloader Finished" << std::endl;
+    Printer::get().out() 
+        << current_time_to_string()
+        << " Url Downloader Finished"
+        << std::endl;
 }
 
 std::ostream& Printer::out() {
