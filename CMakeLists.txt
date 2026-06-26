@@ -30,8 +30,8 @@ set(CURL_VERSION_STRING "8.8.0"                      CACHE STRING "" FORCE)
 
 FetchContent_Declare(
     curlcpp
-    GIT_REPOSITORY https://github.com/JosephP91/curlcpp.git
-    GIT_TAG        3.1
+    GIT_REPOSITORY https://github.com/ivan-r-sigaev/curlcpp.git
+    GIT_TAG        fix-curlinfo-private-ub
     GIT_SHALLOW    TRUE
 )
 FetchContent_MakeAvailable(curlcpp)
