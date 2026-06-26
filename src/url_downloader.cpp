@@ -8,7 +8,6 @@
 #include <cctype>
 #include <chrono>
 #include <sstream>
-#include <cstdio>
 #include <ctime>
 #include <curl_easy.h>
 #include <curl_multi.h>
@@ -39,9 +38,6 @@ static size_t my_write_callback(void *ptr, size_t size, size_t nmemb, void *user
 static void decode_url(std::string& text);
 static std::string filename_from_url(const std::string& url);
 static void print_usage(std::string command_name);
-
-typedef size_t (*curlopt_writefunction_type)(void *ptr, size_t size, size_t nmemb, void *userdata);
-typedef size_t (*curlopt_headerfunction_type)(void *buffer, size_t size, size_t nitems, void *userdata);
 
 int main(int argc, char* argv[]) {
     std::cout << current_time_to_string() << " Url Downloader Started" << std::endl;
@@ -90,7 +86,6 @@ int main(int argc, char* argv[]) {
         }
     }
     
-    int running_handles_count = 0;
     do {
         multi_handle.perform();
         multi_handle.wait(nullptr, 0, 1000, nullptr);
