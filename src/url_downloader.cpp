@@ -156,7 +156,10 @@ static std::vector<std::string> read_urls(const std::filesystem::path& urls_path
     std::vector<std::string> out = {};
     for (std::string line; std::getline(fs, line);) {
         // Skip empty lines.
-        if (std::all_of(line.begin(), line.end(), isspace)) {
+        auto is_whitespace = [](char ch) {
+            return static_cast<bool>(std::isspace(static_cast<unsigned char>(ch)));
+        };
+        if (std::all_of(line.begin(), line.end(), is_whitespace)) {
             continue;
         }
         // Skip non-HTTP/HTTPS protocols.
