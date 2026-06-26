@@ -256,6 +256,9 @@ static void create_file(std::ofstream& fs, std::filesystem::path path) {
     int postfix = 1;
     std::string name = path.filename().string();
     size_t delim = name.rfind('.');
+    if (delim == std::string::npos) {
+        delim = name.size();
+    }
     std::string extension = name.substr(delim);
     std::string filename = name.substr(0, delim);
     while (std::filesystem::exists(path)) {
