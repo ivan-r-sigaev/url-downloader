@@ -204,7 +204,7 @@ static size_t my_header_callback(char *buffer, size_t size, size_t nitems, void 
         auto value = header.substr(delim + 1);
         auto filename = std::string();
         std::transform(
-            value.begin(), value.end(), value.begin(), 
+            key.begin(), key.end(), key.begin(), 
             [](unsigned char c){ return std::tolower(c); }
         );
         if (key == "content-disposition") {
