@@ -202,7 +202,6 @@ static size_t my_header_callback(char *buffer, size_t size, size_t nitems, void 
     if (delim != std::string::npos) {
         auto key = header.substr(0, delim);
         auto value = header.substr(delim + 1);
-        auto filename = std::string();
         std::transform(
             key.begin(), key.end(), key.begin(), 
             [](unsigned char c){ return std::tolower(c); }
@@ -221,7 +220,9 @@ static size_t my_header_callback(char *buffer, size_t size, size_t nitems, void 
                         token = token.substr(1, token.length() - 2);
                     }
                     sanitize_filename(token);
-                    filename = token;
+                    if (!token.empty()) {
+                        handle->out_path.replace_filename(token);
+                    }
                 }
                 const auto utf8_filename_field = std::string("filename*=");
                 if (token.rfind(utf8_filename_field) != std::string::npos) {
@@ -239,7 +240,8 @@ static size_t my_header_callback(char *buffer, size_t size, size_t nitems, void 
                             decode_url(encoded_value);
                             sanitize_filename(encoded_value);
                             if (!encoded_value.empty()) {
-                                filename = encoded_value;
+                                handle->out_path.replace_filename(encoded_value);
+                                break;
                             }
                         }
                     }
