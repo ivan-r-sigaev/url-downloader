@@ -140,8 +140,9 @@ static std::string current_time_to_string() {
     
     std::time_t tt = std::chrono::system_clock::to_time_t(currentTime);
     auto timeinfo = std::localtime(&tt);
-    std::strftime(buffer, size, "%F %H:%M:%S", timeinfo);
-    std::sprintf(buffer, "%s:%03d", buffer, (int)millis);
+    char tmp[size];  // sprintf() shall not read from and write into the same buffer (undefined behaviour).
+    std::strftime(tmp, size, "%F %H:%M:%S", timeinfo);
+    std::sprintf(buffer, "%s:%03d", tmp, (int)millis);
     
     return std::string(buffer);
 }
