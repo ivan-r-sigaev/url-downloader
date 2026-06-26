@@ -32,9 +32,9 @@ public:
 static std::string current_time_to_string();
 static std::vector<std::string> read_urls(const std::filesystem::path& urls_path);
 static void sanitize_filename(std::string& filename);
-static size_t my_header_callback(char *buffer, size_t size, size_t nitems, void *userdata);
+static size_t my_header_callback(void *buffer, size_t size, size_t nitems, void *userdata);
 static void create_file(std::ofstream& fs, std::filesystem::path path);
-static size_t my_write_callback(char *ptr, size_t size, size_t nmemb, void *userdata);
+static size_t my_write_callback(void *ptr, size_t size, size_t nmemb, void *userdata);
 static void decode_url(std::string& text);
 static std::string filename_from_url(const std::string& url);
 static void print_usage(std::string command_name);
@@ -81,8 +81,8 @@ int main(int argc, char* argv[]) {
             handle->out_file.exceptions(std::ios::failbit | std::ios::badbit);
             
             easy_handle->add<CURLOPT_URL>(url.c_str());
-            easy_handle->add<CURLOPT_WRITEFUNCTION>((curlopt_writefunction_type)my_write_callback);
-            easy_handle->add<CURLOPT_HEADERFUNCTION>((curlopt_headerfunction_type)my_header_callback);
+            easy_handle->add<CURLOPT_WRITEFUNCTION>(my_write_callback);
+            easy_handle->add<CURLOPT_HEADERFUNCTION>(my_header_callback);
             easy_handle->add<CURLOPT_WRITEDATA>(usrptr);
             easy_handle->add<CURLOPT_HEADERDATA>(usrptr);
             easy_handle->add<CURLOPT_PRIVATE>(usrptr);
@@ -193,7 +193,7 @@ static void sanitize_filename(std::string& filename) {
     );
 }
 
-static size_t my_header_callback(char *buffer, size_t size, size_t nitems, void *userdata) {
+static size_t my_header_callback(void *buffer, size_t size, size_t nitems, void *userdata) {
     auto handle = static_cast<DownloadHandle*>(userdata);
 
     if (!handle->has_started) {
@@ -206,7 +206,7 @@ static size_t my_header_callback(char *buffer, size_t size, size_t nitems, void 
             << std::endl;
     }
 
-    std::string header(buffer, size * nitems);
+    std::string header(static_cast<char*>(buffer), size * nitems);
     auto delim = header.find(':');
     if (delim != std::string::npos) {
         auto key = header.substr(0, delim);
@@ -277,7 +277,7 @@ static void create_file(std::ofstream& fs, std::filesystem::path path) {
     fs.open(path, std::fstream::out | std::fstream::binary);
 }
 
-static size_t my_write_callback(char *ptr, size_t size, size_t nmemb, void *userdata) {
+static size_t my_write_callback(void *ptr, size_t size, size_t nmemb, void *userdata) {
     auto handle = static_cast<DownloadHandle*>(userdata);
 
     if (!handle->out_file.is_open()) {
@@ -285,7 +285,7 @@ static size_t my_write_callback(char *ptr, size_t size, size_t nmemb, void *user
     }
 
     if (ptr != nullptr && nmemb * size != 0) {
-        handle->out_file.write(ptr, nmemb * size);
+        handle->out_file.write(static_cast<char*>(ptr), nmemb * size);
     }
 
     return nmemb * size;
