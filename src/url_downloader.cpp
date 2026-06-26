@@ -6,17 +6,18 @@
 #include <vector>
 #include <algorithm>
 #include <cctype>
-#include <curl/curl.h>
 #include <chrono>
 #include <sstream>
 #include <cstdio>
 #include <ctime>
+#include <curl_easy.h>
+#include <curl_multi.h>
 
 /// Handle to manage an instance of downloading a file from URL.
 class DownloadHandle {
 public:
+    curl::curl_easy easy_handle;
     std::string url;
-    CURLU* url_handle;
     std::filesystem::path out_path{};
     std::ofstream out_file{};
     bool has_started = false;
@@ -24,77 +25,25 @@ public:
 
     explicit DownloadHandle(
         std::string _url,
-        CURLU* _url_handle,
         std::filesystem::path _out_path
-    ) : url(_url), url_handle(_url_handle), out_path(_out_path) {}
+    ) : url(_url), out_path(_out_path) {}
 };
 
 static std::string current_time_to_string();
 static std::vector<std::string> read_urls(const std::filesystem::path& urls_path);
 static void sanitize_filename(std::string& filename);
-static size_t header_callback(char *buffer, size_t size, size_t nitems, void *userdata);
+static size_t my_header_callback(char *buffer, size_t size, size_t nitems, void *userdata);
 static void create_file(std::ofstream& fs, std::filesystem::path path);
-static size_t write_callback(char *ptr, size_t size, size_t nmemb, void *userdata);
+static size_t my_write_callback(char *ptr, size_t size, size_t nmemb, void *userdata);
 static void decode_url(std::string& text);
 static std::string filename_from_url(const std::string& url);
 static void print_usage(std::string command_name);
 
-#define assert_easy_curl(code) _assert_easy_curl(code, __LINE__)
-void _assert_easy_curl(CURLcode code, int line) {
-    if (code != CURLE_OK) {
-        std::cerr 
-            << current_time_to_string() 
-            << " Error: libcurl easy error, aborting"
-            << " Message: " << curl_easy_strerror(code)
-            << " Line: " << line
-            << '\n';
-        std::abort();
-    }
-}
-
-#define assert_multi_curl(code) _assert_multi_curl(code, __LINE__)
-void _assert_multi_curl(CURLMcode code, int line) {
-    if (code != CURLM_OK) {
-        std::cerr
-            << current_time_to_string() 
-            << " Error: libcurl multi error, aborting"
-            << " Message: " << curl_multi_strerror(code)
-            << " Line: " << line
-            << '\n';
-        std::abort();
-    }
-}
-
-#define assert_url_curl(code) _assert_url_curl(code, __LINE__)
-void _assert_url_curl(CURLUcode code, int line) {
-    if (code != CURLUE_OK) {
-        std::cerr
-            << current_time_to_string() 
-            << " Error: libcurl url error, aborting"
-            << " Message: " << curl_url_strerror(code)
-            << " Line: " << line
-            << '\n';
-        std::abort();
-    }
-}
-
-#define assert_nonnull_curl(ptr) _assert_nonnull_curl(ptr, __LINE__)
-void _assert_nonnull_curl(void* ptr, int line) {
-    if (ptr == nullptr) {
-        std::cerr
-            << current_time_to_string()
-            << " Error: internal libcurl error, aborting"
-            << " Line: " << line
-            << '\n';
-        std::abort();
-    }
-}
+typedef size_t (*curlopt_writefunction_type)(void *ptr, size_t size, size_t nmemb, void *userdata);
+typedef size_t (*curlopt_headerfunction_type)(void *buffer, size_t size, size_t nitems, void *userdata);
 
 int main(int argc, char* argv[]) {
     std::cout << current_time_to_string() << " Url Downloader Started" << std::endl;
-
-    assert_easy_curl(curl_global_init(CURL_GLOBAL_ALL));
-    
 
     std::string command_name = argc >= 1 ? std::string(argv[0]) : "url_downloader";
     
@@ -114,9 +63,8 @@ int main(int argc, char* argv[]) {
         << "; parallel-download-count: " << parallel_download_count
         << std::endl;
 
-    CURLM* multi_handle = curl_multi_init();
-    assert_nonnull_curl(multi_handle);
-    assert_multi_curl(curl_multi_setopt(multi_handle, CURLMOPT_MAX_TOTAL_CONNECTIONS, (long)parallel_download_count));
+    auto multi_handle = curl::curl_multi();
+    multi_handle.add<CURLMOPT_MAX_TOTAL_CONNECTIONS>((long)parallel_download_count);
     auto handles = std::vector<DownloadHandle>();
     {
         auto urls = read_urls(urls_path);
@@ -124,48 +72,41 @@ int main(int argc, char* argv[]) {
         for (const auto& url : urls) {
             auto out_path = out_dir_path;
             out_path /= filename_from_url(url);
+
+            auto handle = &handles.emplace_back(url, out_path);
+            auto usrptr = static_cast<void*>(handle);
+            auto easy_handle = &handle->easy_handle;
             
-            auto url_handle = curl_url();
-            assert_nonnull_curl(url_handle);
-            assert_url_curl(curl_url_set(url_handle, CURLUPART_URL, url.c_str(), 0));
-    
-            auto handle = static_cast<void*>(&handles.emplace_back(url, url_handle, out_path));
-    
-            auto easy_handle = curl_easy_init();
-            assert_nonnull_curl(easy_handle);
-            assert_easy_curl(curl_easy_setopt(easy_handle, CURLOPT_CURLU, url_handle));
-            assert_easy_curl(curl_easy_setopt(easy_handle, CURLOPT_WRITEFUNCTION, &write_callback));
-            assert_easy_curl(curl_easy_setopt(easy_handle, CURLOPT_HEADERFUNCTION, &header_callback));
-            assert_easy_curl(curl_easy_setopt(easy_handle, CURLOPT_WRITEDATA, handle));
-            assert_easy_curl(curl_easy_setopt(easy_handle, CURLOPT_HEADERDATA, handle));
-            assert_easy_curl(curl_easy_setopt(easy_handle, CURLOPT_PRIVATE, handle));
-            assert_multi_curl(curl_multi_add_handle(multi_handle, easy_handle));
+            easy_handle->add<CURLOPT_URL>(url.c_str());
+            easy_handle->add<CURLOPT_WRITEFUNCTION>((curlopt_writefunction_type)my_write_callback);
+            easy_handle->add<CURLOPT_HEADERFUNCTION>((curlopt_headerfunction_type)my_header_callback);
+            easy_handle->add<CURLOPT_WRITEDATA>(usrptr);
+            easy_handle->add<CURLOPT_HEADERDATA>(usrptr);
+            easy_handle->add<CURLOPT_PRIVATE>(usrptr);
+            multi_handle.add(*easy_handle);
         }
     }
     
     int running_handles_count = 0;
     do {
-        assert_multi_curl(curl_multi_perform(multi_handle, &running_handles_count));
-        assert_multi_curl(curl_multi_wait(multi_handle, nullptr, 0, 1000, nullptr));
+        multi_handle.perform();
+        multi_handle.wait(nullptr, 0, 1000, nullptr);
 
         while (true) {
-            int msgs_left = 0;
-            CURLMsg* msg = curl_multi_info_read(multi_handle, &msgs_left);
-            if (msg == nullptr) {
+            auto result = multi_handle.get_next_finished();
+            if (result == nullptr) {
                 break;
             }
-            if (msg->msg == CURLMSG_DONE) {
-                assert_easy_curl(msg->data.result);
+            auto msg = result.get();
+            if (msg->get_message() == CURLMSG_DONE) {
+                // TODO: check result
+                // assert_easy_curl(msg->data.result);
                 auto now = std::chrono::steady_clock::now();
-                auto easy_handle = msg->easy_handle;
-                long http_code = 0;
-                DownloadHandle* handle = nullptr;
-                assert_easy_curl(curl_easy_getinfo(easy_handle, CURLINFO_RESPONSE_CODE, &http_code));
-                assert_easy_curl(curl_easy_getinfo(easy_handle, CURLINFO_PRIVATE, &handle));
+                auto easy_handle = msg->get_handler();
+                auto http_code = easy_handle->get_info<CURLINFO_RESPONSE_CODE>().get();
+                auto usrptr = easy_handle->get_info<CURLINFO_PRIVATE>().get();
+                DownloadHandle* handle = static_cast<DownloadHandle*>(usrptr);
                 handle->out_file.close();
-                assert_multi_curl(curl_multi_remove_handle(multi_handle, easy_handle));
-                curl_url_cleanup(handle->url_handle);
-                curl_easy_cleanup(easy_handle);
                 if (http_code != 200) {
                     std::cerr 
                         << "Error: Failed to obtain URL contents; Code: "
@@ -183,10 +124,7 @@ int main(int argc, char* argv[]) {
             }
             std::cout << std::flush;
         }
-    } while (running_handles_count > 0);
-
-    assert_multi_curl(curl_multi_cleanup(multi_handle));
-    curl_global_cleanup();
+    } while (multi_handle.get_active_transfers() > 0);
 
     std::cout << current_time_to_string() << " Url Downloader Finished" << std::endl;
     return 0;
@@ -246,7 +184,7 @@ static void sanitize_filename(std::string& filename) {
     );
 }
 
-static size_t header_callback(char *buffer, size_t size, size_t nitems, void *userdata) {
+static size_t my_header_callback(char *buffer, size_t size, size_t nitems, void *userdata) {
     auto handle = static_cast<DownloadHandle*>(userdata);
 
     if (!handle->has_started) {
@@ -310,7 +248,7 @@ static void create_file(std::ofstream& fs, std::filesystem::path path) {
     fs.open(path, std::fstream::out | std::fstream::binary);
 }
 
-static size_t write_callback(char *ptr, size_t size, size_t nmemb, void *userdata) {
+static size_t my_write_callback(char *ptr, size_t size, size_t nmemb, void *userdata) {
     auto handle = static_cast<DownloadHandle*>(userdata);
 
     if (!handle->out_file.is_open()) {
