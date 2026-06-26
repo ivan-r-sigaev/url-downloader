@@ -76,6 +76,9 @@ int main(int argc, char* argv[]) {
             auto handle = &handles.emplace_back(url, out_path);
             auto usrptr = static_cast<void*>(handle);
             auto easy_handle = &handle->easy_handle;
+
+            // Set out_file to throw on any errors to simplify error handling.
+            handle->out_file.exceptions(std::ios::failbit | std::ios::badbit);
             
             easy_handle->add<CURLOPT_URL>(url.c_str());
             easy_handle->add<CURLOPT_WRITEFUNCTION>((curlopt_writefunction_type)my_write_callback);
@@ -268,7 +271,6 @@ static void create_file(std::ofstream& fs, std::filesystem::path path) {
         postfix++;
     }
 
-    // TODO: should I check success?
     fs.open(path, std::fstream::out | std::fstream::binary);
 }
 
@@ -280,7 +282,6 @@ static size_t my_write_callback(char *ptr, size_t size, size_t nmemb, void *user
     }
 
     if (ptr != nullptr && nmemb * size != 0) {
-        // TODO: Should I check success?
         handle->out_file.write(ptr, nmemb * size);
     }
 
