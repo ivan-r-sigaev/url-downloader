@@ -163,8 +163,10 @@ static std::vector<std::string> read_urls(const std::filesystem::path& urls_path
                 << '\n';
             continue;
         }
-        // Trim trailing newline
-        line.pop_back();
+        // Trim trailing whitespace
+        const auto whitespace = " \t\n\r";
+        auto end = line.find_last_not_of(whitespace);
+        line = line.substr(0, end + 1);
         out.push_back(line);
     }
     return out;
