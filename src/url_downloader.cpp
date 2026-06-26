@@ -64,7 +64,7 @@ int main(int argc, char* argv[]) {
         << std::endl;
 
     auto multi_handle = curl::curl_multi();
-    multi_handle.add<CURLMOPT_MAX_TOTAL_CONNECTIONS>((long)parallel_download_count);
+    multi_handle.add<CURLMOPT_MAX_TOTAL_CONNECTIONS>(static_cast<long>(parallel_download_count));
     auto handles = std::vector<DownloadHandle>();
     {
         auto urls = read_urls(urls_path);
@@ -145,7 +145,7 @@ static std::string current_time_to_string() {
     auto timeinfo = std::localtime(&tt);
     char tmp[size];  // sprintf() shall not read from and write into the same buffer (undefined behaviour).
     std::strftime(tmp, size, "%F %H:%M:%S", timeinfo);
-    std::sprintf(buffer, "%s:%03d", tmp, (int)millis);
+    std::sprintf(buffer, "%s:%03d", tmp, static_cast<int>(millis));
     
     return std::string(buffer);
 }
