@@ -225,7 +225,24 @@ static size_t my_header_callback(char *buffer, size_t size, size_t nitems, void 
                 }
                 const auto utf8_filename_field = std::string("filename*=");
                 if (token.rfind(utf8_filename_field) != std::string::npos) {
-                    // TODO: parse utf-8 filename...
+                    auto encoded = token.substr(utf8_filename_field.size());
+                    // Encoding format: charset'language'encoded-value
+                    auto first_quote = encoded.find('\'');
+                    if (first_quote != std::string::npos) {
+                        auto second_quote = encoded.find('\'', first_quote + 1);
+                        if (second_quote != std::string::npos) {
+                            auto encoded_value = encoded.substr(second_quote + 1);
+                            // Unquote if needed.
+                            if (!encoded_value.empty() && encoded_value[0] == '"' && encoded_value.back() == '"') {
+                                encoded_value = encoded_value.substr(1, encoded_value.length() - 2);
+                            }
+                            decode_url(encoded_value);
+                            sanitize_filename(encoded_value);
+                            if (!encoded_value.empty()) {
+                                filename = encoded_value;
+                            }
+                        }
+                    }
                 }
             }
         }
