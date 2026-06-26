@@ -21,5 +21,19 @@ else()
     set(CURL_USE_SCHANNEL OFF CACHE BOOL "" FORCE)
 endif()
 set(HTTP_ONLY          ON  CACHE BOOL "" FORCE)  # Only HTTP/HTTPS needed.
+FetchContent_MakeAvailable(curl)
+
+# Need to provide values manually to curlcpp.
+set(CURL_INCLUDE_DIR    "${curl_SOURCE_DIR}/include" CACHE PATH "" FORCE)
+set(CURL_LIBRARY        libcurl_static               CACHE STRING "" FORCE)
+set(CURL_VERSION_STRING "8.8.0"                      CACHE STRING "" FORCE)
+
+FetchContent_Declare(
+    curlcpp
+    GIT_REPOSITORY https://github.com/ivan-r-sigaev/curlcpp.git
+    GIT_TAG        fix-curlinfo-private-ub
+    GIT_SHALLOW    TRUE
+)
+FetchContent_MakeAvailable(curlcpp)
 
 add_subdirectory(src)
