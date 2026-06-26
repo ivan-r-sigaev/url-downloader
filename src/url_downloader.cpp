@@ -188,70 +188,78 @@ static void sanitize_filename(std::string& filename) {
 }
 
 static size_t my_header_callback(void *buffer, size_t size, size_t nitems, void *userdata) {
-    auto handle = static_cast<DownloadHandle*>(userdata);
-
-    if (!handle->has_started) {
-        handle->start_time = std::chrono::steady_clock::now();
-        handle->has_started = true;
-        std::cout
-            << current_time_to_string()
-            << " " << handle->url
-            << " - started downloading"
-            << std::endl;
-    }
-
-    std::string header(static_cast<char*>(buffer), size * nitems);
-    auto delim = header.find(':');
-    if (delim != std::string::npos) {
-        auto key = header.substr(0, delim);
-        auto value = header.substr(delim + 1);
-        std::transform(
-            key.begin(), key.end(), key.begin(), 
-            [](unsigned char c){ return std::tolower(c); }
-        );
-        if (key == "content-disposition") {
-            auto sstream = std::stringstream(value);
-            auto token = std::string();
-
-            while (std::getline(sstream, token, ';')) {
-                const auto whitespace = " \t";
-                token = token.substr(token.find_first_not_of(whitespace));
-                const auto filename_field = std::string("filename=");
-                const auto utf8_filename_field = std::string("filename*=");
-                if (token.rfind(utf8_filename_field, 0) != std::string::npos) {
-                    auto encoded = token.substr(utf8_filename_field.size());
-                    // Encoding format: charset'language'encoded-value
-                    auto first_quote = encoded.find('\'');
-                    if (first_quote != std::string::npos) {
-                        auto second_quote = encoded.find('\'', first_quote + 1);
-                        if (second_quote != std::string::npos) {
-                            auto encoded_value = encoded.substr(second_quote + 1);
-                            // Unquote if needed.
-                            if (!encoded_value.empty() && encoded_value[0] == '"' && encoded_value.back() == '"') {
-                                encoded_value = encoded_value.substr(1, encoded_value.length() - 2);
-                            }
-                            decode_url(encoded_value);
-                            sanitize_filename(encoded_value);
-                            if (!encoded_value.empty()) {
-                                handle->out_path.replace_filename(encoded_value);
-                                break;
+    // Throwing outside from a C++ callback that is called by C code (libcurl) is UNDEFINED BEHAVIOUR.
+    try {
+        auto handle = static_cast<DownloadHandle*>(userdata);
+    
+        if (!handle->has_started) {
+            handle->start_time = std::chrono::steady_clock::now();
+            handle->has_started = true;
+            std::cout
+                << current_time_to_string()
+                << " " << handle->url
+                << " - started downloading"
+                << std::endl;
+        }
+    
+        std::string header(static_cast<char*>(buffer), size * nitems);
+        auto delim = header.find(':');
+        if (delim != std::string::npos) {
+            auto key = header.substr(0, delim);
+            auto value = header.substr(delim + 1);
+            std::transform(
+                key.begin(), key.end(), key.begin(), 
+                [](unsigned char c){ return std::tolower(c); }
+            );
+            if (key == "content-disposition") {
+                auto sstream = std::stringstream(value);
+                auto token = std::string();
+    
+                while (std::getline(sstream, token, ';')) {
+                    const auto whitespace = " \t";
+                    token = token.substr(token.find_first_not_of(whitespace));
+                    const auto filename_field = std::string("filename=");
+                    const auto utf8_filename_field = std::string("filename*=");
+                    if (token.rfind(utf8_filename_field, 0) != std::string::npos) {
+                        auto encoded = token.substr(utf8_filename_field.size());
+                        // Encoding format: charset'language'encoded-value
+                        auto first_quote = encoded.find('\'');
+                        if (first_quote != std::string::npos) {
+                            auto second_quote = encoded.find('\'', first_quote + 1);
+                            if (second_quote != std::string::npos) {
+                                auto encoded_value = encoded.substr(second_quote + 1);
+                                // Unquote if needed.
+                                if (!encoded_value.empty() && encoded_value[0] == '"' && encoded_value.back() == '"') {
+                                    encoded_value = encoded_value.substr(1, encoded_value.length() - 2);
+                                }
+                                decode_url(encoded_value);
+                                sanitize_filename(encoded_value);
+                                if (!encoded_value.empty()) {
+                                    handle->out_path.replace_filename(encoded_value);
+                                    break;
+                                }
                             }
                         }
-                    }
-                } else if (token.rfind(filename_field, 0) != std::string::npos) {
-                    token = token.substr(filename_field.size());
-                    if (!token.empty() && token[0] == '"' && token.back() == '"') {
-                        token = token.substr(1, token.length() - 2);
-                    }
-                    sanitize_filename(token);
-                    if (!token.empty()) {
-                        handle->out_path.replace_filename(token);
+                    } else if (token.rfind(filename_field, 0) != std::string::npos) {
+                        token = token.substr(filename_field.size());
+                        if (!token.empty() && token[0] == '"' && token.back() == '"') {
+                            token = token.substr(1, token.length() - 2);
+                        }
+                        sanitize_filename(token);
+                        if (!token.empty()) {
+                            handle->out_path.replace_filename(token);
+                        }
                     }
                 }
             }
         }
+        return size * nitems;
+    } catch (std::exception e) {
+        std::cerr << e.what() << '\n';
+        std::exit(EXIT_FAILURE);
+    } catch (...) {
+        std::exit(EXIT_FAILURE);
     }
-    return size * nitems;
 }
 
 static void create_file(std::ofstream& fs, std::filesystem::path path) {
@@ -272,17 +280,25 @@ static void create_file(std::ofstream& fs, std::filesystem::path path) {
 }
 
 static size_t my_write_callback(void *ptr, size_t size, size_t nmemb, void *userdata) {
-    auto handle = static_cast<DownloadHandle*>(userdata);
+    // Throwing outside from a C++ callback that is called by C code (libcurl) is UNDEFINED BEHAVIOUR.
+    try {
+        auto handle = static_cast<DownloadHandle*>(userdata);
 
-    if (!handle->out_file.is_open()) {
-        create_file(handle->out_file, handle->out_path);
+        if (!handle->out_file.is_open()) {
+            create_file(handle->out_file, handle->out_path);
+        }
+
+        if (ptr != nullptr && nmemb * size != 0) {
+            handle->out_file.write(static_cast<char*>(ptr), nmemb * size);
+        }
+
+        return nmemb * size;
+    } catch (std::exception e) {
+        std::cerr << e.what() << '\n';
+        std::exit(EXIT_FAILURE);
+    } catch (...) {
+        std::exit(EXIT_FAILURE);
     }
-
-    if (ptr != nullptr && nmemb * size != 0) {
-        handle->out_file.write(static_cast<char*>(ptr), nmemb * size);
-    }
-
-    return nmemb * size;
 }
 
 static void decode_url(std::string& text) {
