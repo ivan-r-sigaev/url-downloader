@@ -12,36 +12,26 @@
 #include <curl_easy.h>
 #include <curl_multi.h>
 #include <iomanip>
-
-/// Handle to manage an instance of downloading a file from URL.
-class DownloadHandle {
-public:
-    curl::curl_easy easy_handle;
-    std::string url;
-    std::filesystem::path out_path{};
-    std::ofstream out_file{};
-    bool has_started = false;
-    std::chrono::steady_clock::time_point start_time{};
-
-    explicit DownloadHandle(
-        std::string _url,
-        std::filesystem::path _out_path
-    ) : url(_url), out_path(_out_path) {}
-};
+#include <optional>
+#include <utility>
 
 class Arguments;
 
 static std::string current_time_to_string();
 static std::vector<std::string> read_urls(const std::filesystem::path& urls_path);
-static void sanitize_filename(std::string& filename);
-static size_t my_header_callback(void *buffer, size_t size, size_t nitems, void *userdata);
-static void create_file(std::ofstream& fs, std::filesystem::path path);
-static size_t my_write_callback(void *ptr, size_t size, size_t nmemb, void *userdata);
 static void decode_url(std::string& text);
-static std::string filename_from_url(const std::string& url);
 static void print_app_start();
 static void print_app_usage(std::string command_name);
 static void print_app_arguments(Arguments args);
+static void print_download_error(const std::string& url, long http_code);
+static void print_download_success(
+    const std::string& url,
+    const std::filesystem::path& output_file_path,
+    std::chrono::milliseconds elapsed
+);
+static void print_download_start(const std::string& url);
+static void print_libcurl_crash();
+static void print_app_finish();
 
 // Command line arguments for the program.
 class Arguments {
@@ -55,24 +45,58 @@ public:
         std::filesystem::path _output_directory,
         long _max_parallel_downloads
     ) : 
-        urls_file(_urls_file),
-        output_directory(_output_directory),
-        max_parallel_downloads(_max_parallel_downloads)
+        urls_file(std::move(_urls_file)),
+        output_directory(std::move(_output_directory)),
+        max_parallel_downloads(std::move(_max_parallel_downloads))
     {}
-    static Arguments parse(int argc, char* argv[]) {
-        std::string command_name = argc >= 1 ? std::string(argv[0]) : "url_downloader";
+    // Parses the arguments from the command line.
+    static Arguments parse(int argc, char* argv[]);
+};
 
-        if (argc < 4) {
-            print_app_usage(command_name);
-            std::exit(EXIT_FAILURE);
-        }
+// Internal structure used by ParallelDownload to manage a single download connection.
+class DownloadInstance {
+public:
+    curl::curl_easy easy_handle;
+    std::string url;
+    std::filesystem::path output_file_path;
+    std::ofstream output_file;
+    std::optional<std::chrono::steady_clock::time_point> start_time;
+public:
+    explicit DownloadInstance(
+        curl::curl_easy _easy_handle,
+        std::string _url,
+        std::filesystem::path _output_file_path,
+        std::ofstream _output_file,
+        std::optional<std::chrono::steady_clock::time_point> _start_time
+    ):
+        easy_handle(std::move(_easy_handle)),
+        url(std::move(_url)),
+        output_file_path(std::move(_output_file_path)),
+        output_file(std::move(_output_file)),
+        start_time(std::move(_start_time))
+    {}
+    DownloadInstance(const DownloadInstance&) = delete;
+    DownloadInstance& operator=(const DownloadInstance&) = delete;
+    DownloadInstance(DownloadInstance&&) = default;
+    DownloadInstance& operator=(DownloadInstance&&) = default;
+};
 
-        auto urls_file = std::filesystem::path(argv[1]);
-        auto output_directory = std::filesystem::path(argv[2]);
-        auto max_parallel_downloads = std::stol(std::string(argv[3]));
-
-        return Arguments(urls_file, output_directory, max_parallel_downloads);
-    }
+// Simplifies downloading multiple urls at once.
+class ParallelDownload {
+public:
+    ParallelDownload() = default;
+    ParallelDownload(const ParallelDownload&) = delete;
+    ParallelDownload& operator=(const ParallelDownload&) = delete;
+    // Enqueue a new url to be downloaded. Does not start downloading until `.perform()` is called.
+    void add(const std::string& url, const std::filesystem::path& output_directory);
+    // Begins downloading all of the enqueued urls.
+    void perform(long max_parallel_downloads);
+private:
+    std::vector<std::optional<DownloadInstance>> downloads {};
+private:
+    static size_t header_callback(void *buffer, size_t size, size_t nitems, void *userdata);
+    static size_t write_callback(void *ptr, size_t size, size_t nmemb, void *userdata);
+    static std::string filename_from_url(const std::string& url);
 };
 
 int main(int argc, char* argv[]) {
@@ -81,77 +105,13 @@ int main(int argc, char* argv[]) {
     auto args = Arguments::parse(argc, argv);
     print_app_arguments(args);
 
-    auto multi_handle = curl::curl_multi();
-    multi_handle.add<CURLMOPT_MAX_TOTAL_CONNECTIONS>(static_cast<long>(args.max_parallel_downloads));
-    auto handles = std::vector<DownloadHandle>();
-    {
-        auto urls = read_urls(args.urls_file);
-        handles.reserve(urls.size());  // `handles` must not be reallocated
-        for (const auto& url : urls) {
-            auto out_path = args.output_directory;
-            out_path /= filename_from_url(url);
-
-            auto handle = &handles.emplace_back(url, out_path);
-            auto usrptr = static_cast<void*>(handle);
-            auto easy_handle = &handle->easy_handle;
-
-            // Set out_file to throw on any errors to simplify error handling.
-            handle->out_file.exceptions(std::ios::failbit | std::ios::badbit);
-            
-            easy_handle->add<CURLOPT_URL>(url.c_str());
-            easy_handle->add<CURLOPT_WRITEFUNCTION>(my_write_callback);
-            easy_handle->add<CURLOPT_HEADERFUNCTION>(my_header_callback);
-            easy_handle->add<CURLOPT_WRITEDATA>(usrptr);
-            easy_handle->add<CURLOPT_HEADERDATA>(usrptr);
-            easy_handle->add<CURLOPT_PRIVATE>(usrptr);
-            multi_handle.add(*easy_handle);
-        }
+    auto parallel_download = ParallelDownload();
+    for (const auto& url : read_urls(args.urls_file)) {
+        parallel_download.add(url, args.output_directory);
     }
-    
-    do {
-        multi_handle.perform();
-        multi_handle.wait(nullptr, 0, 1000, nullptr);
+    parallel_download.perform(args.max_parallel_downloads);
 
-        while (true) {
-            auto result = multi_handle.get_next_finished();
-            if (result == nullptr) {
-                break;
-            }
-            auto msg = result.get();
-            if (msg->get_message() == CURLMSG_DONE) {
-                if (msg->get_code() != CURLE_OK) {
-                    std::cerr 
-                        << current_time_to_string()
-                        << " internal libcurl error, crashing.";
-                    std::exit(EXIT_FAILURE);
-                }
-                auto now = std::chrono::steady_clock::now();
-                auto easy_handle = msg->get_handler();
-                auto http_code = easy_handle->get_info<CURLINFO_RESPONSE_CODE>().get();
-                auto usrptr = easy_handle->get_info<CURLINFO_PRIVATE>().get();
-                DownloadHandle* handle = static_cast<DownloadHandle*>(usrptr);
-                handle->out_file.close();
-                if (http_code != 200) {
-                    std::cerr 
-                        << "Error: Failed to obtain URL contents; Code: "
-                        << http_code 
-                        << "; URL: "
-                        << handle->out_path 
-                        << '\n';
-                } else {
-                    auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - handle->start_time).count();
-                    std::cout
-                        << current_time_to_string()
-                        << " " << handle->out_path
-                        << " - finished downloading in " << elapsed << " ms\n";
-                }
-                multi_handle.remove(*easy_handle);
-            }
-            std::cout << std::flush;
-        }
-    } while (multi_handle.get_active_transfers() > 0);
-
-    std::cout << current_time_to_string() << " Url Downloader Finished" << std::endl;
+    print_app_finish();
     return 0;
 }
 
@@ -213,81 +173,6 @@ static void sanitize_filename(std::string& filename) {
     );
 }
 
-static size_t my_header_callback(void *buffer, size_t size, size_t nitems, void *userdata) {
-    // Throwing outside from a C++ callback that is called by C code (libcurl) is UNDEFINED BEHAVIOUR.
-    try {
-        auto handle = static_cast<DownloadHandle*>(userdata);
-    
-        if (!handle->has_started) {
-            handle->start_time = std::chrono::steady_clock::now();
-            handle->has_started = true;
-            std::cout
-                << current_time_to_string()
-                << " " << handle->url
-                << " - started downloading"
-                << std::endl;
-        }
-    
-        std::string header(static_cast<char*>(buffer), size * nitems);
-        auto delim = header.find(':');
-        if (delim != std::string::npos) {
-            auto key = header.substr(0, delim);
-            auto value = header.substr(delim + 1);
-            std::transform(
-                key.begin(), key.end(), key.begin(), 
-                [](unsigned char c){ return std::tolower(c); }
-            );
-            if (key == "content-disposition") {
-                auto sstream = std::stringstream(value);
-                auto token = std::string();
-    
-                while (std::getline(sstream, token, ';')) {
-                    const auto whitespace = " \t";
-                    token = token.substr(token.find_first_not_of(whitespace));
-                    const auto filename_field = std::string("filename=");
-                    const auto utf8_filename_field = std::string("filename*=");
-                    if (token.rfind(utf8_filename_field, 0) != std::string::npos) {
-                        auto encoded = token.substr(utf8_filename_field.size());
-                        // Encoding format: charset'language'encoded-value
-                        auto first_quote = encoded.find('\'');
-                        if (first_quote != std::string::npos) {
-                            auto second_quote = encoded.find('\'', first_quote + 1);
-                            if (second_quote != std::string::npos) {
-                                auto encoded_value = encoded.substr(second_quote + 1);
-                                // Unquote if needed.
-                                if (!encoded_value.empty() && encoded_value[0] == '"' && encoded_value.back() == '"') {
-                                    encoded_value = encoded_value.substr(1, encoded_value.length() - 2);
-                                }
-                                decode_url(encoded_value);
-                                sanitize_filename(encoded_value);
-                                if (!encoded_value.empty()) {
-                                    handle->out_path.replace_filename(encoded_value);
-                                    break;
-                                }
-                            }
-                        }
-                    } else if (token.rfind(filename_field, 0) != std::string::npos) {
-                        token = token.substr(filename_field.size());
-                        if (!token.empty() && token[0] == '"' && token.back() == '"') {
-                            token = token.substr(1, token.length() - 2);
-                        }
-                        sanitize_filename(token);
-                        if (!token.empty()) {
-                            handle->out_path.replace_filename(token);
-                        }
-                    }
-                }
-            }
-        }
-        return size * nitems;
-    } catch (std::exception e) {
-        std::cerr << e.what() << '\n';
-        std::exit(EXIT_FAILURE);
-    } catch (...) {
-        std::exit(EXIT_FAILURE);
-    }
-}
-
 static void create_file(std::ofstream& fs, std::filesystem::path path) {
     int postfix = 1;
     std::string name = path.filename().string();
@@ -305,17 +190,197 @@ static void create_file(std::ofstream& fs, std::filesystem::path path) {
     fs.open(path, std::fstream::out | std::fstream::binary);
 }
 
-static size_t my_write_callback(void *ptr, size_t size, size_t nmemb, void *userdata) {
+Arguments Arguments::parse(int argc, char* argv[]) {
+    std::string command_name = argc >= 1 ? std::string(argv[0]) : "url_downloader";
+
+    if (argc < 4) {
+        print_app_usage(command_name);
+        std::exit(EXIT_FAILURE);
+    }
+
+    auto urls_file = std::filesystem::path(argv[1]);
+    auto output_directory = std::filesystem::path(argv[2]);
+    auto max_parallel_downloads = std::stol(std::string(argv[3]));
+
+    return Arguments(urls_file, output_directory, max_parallel_downloads);
+}
+
+void ParallelDownload::add(const std::string& url, const std::filesystem::path& output_directory) {
+    auto output_file_path = output_directory;
+    output_file_path /= filename_from_url(url);
+
+    auto& download = this->downloads.emplace_back(
+        std::in_place,
+        curl::curl_easy(),
+        url,
+        output_file_path,
+        std::ofstream(),
+        std::nullopt
+    ).value();
+
+    // Set output_file to throw on any errors to simplify error handling.
+    download.output_file.exceptions(std::ios::failbit | std::ios::badbit);
+
+    download.easy_handle.add<CURLOPT_URL>(url.c_str());
+    download.easy_handle.add<CURLOPT_WRITEFUNCTION>(ParallelDownload::write_callback);
+    download.easy_handle.add<CURLOPT_HEADERFUNCTION>(ParallelDownload::header_callback);
+}
+
+void ParallelDownload::perform(long max_parallel_downloads) {
+    curl::curl_multi multi_handle {};
+    multi_handle.add<CURLMOPT_MAX_TOTAL_CONNECTIONS>(max_parallel_downloads);
+
+    for (auto& opt : this->downloads) {
+        auto& download = opt.value();
+        auto userdata = static_cast<void*>(&opt);
+        download.easy_handle.add<CURLOPT_WRITEDATA>(userdata);
+        download.easy_handle.add<CURLOPT_HEADERDATA>(userdata);
+        download.easy_handle.add<CURLOPT_PRIVATE>(userdata);
+        multi_handle.add(download.easy_handle);
+    }
+
+    do {
+        multi_handle.perform();
+        multi_handle.wait(nullptr, 0, 1000, nullptr);
+
+        while (true) {
+            auto result = multi_handle.get_next_finished();
+            if (result == nullptr) {
+                break;
+            }
+            auto msg = result.get();
+            if (msg->get_message() == CURLMSG_DONE) {
+                auto now = std::chrono::steady_clock::now();
+
+                if (msg->get_code() != CURLE_OK) {
+                    print_libcurl_crash();
+                    std::exit(EXIT_FAILURE);
+                }
+                
+                auto userdata = msg->get_handler()->get_info<CURLINFO_PRIVATE>().get();
+                auto& opt = *static_cast<std::optional<DownloadInstance>*>(userdata);
+                auto& download = opt.value();
+
+                auto http_code = download.easy_handle.get_info<CURLINFO_RESPONSE_CODE>().get();
+                if (http_code != 200) {
+                    print_download_error(download.url, http_code);
+                } else {
+                    auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - download.start_time.value());
+                    print_download_success(download.url, download.output_file_path, elapsed);
+                }
+
+                multi_handle.remove(download.easy_handle);
+                opt = std::nullopt;
+            }
+        }
+    } while (multi_handle.get_active_transfers() > 0);
+
+    this->downloads.clear();
+    this->downloads.shrink_to_fit();
+}
+
+static std::optional<std::string> parse_content_disposition(const std::string& value) {
+    auto sstream = std::stringstream(value);
+    auto token = std::string();
+    std::optional<std::string> filename = std::nullopt;
+
+    while (std::getline(sstream, token, ';')) {
+        const auto whitespace = " \t";
+        token = token.substr(token.find_first_not_of(whitespace));
+        const auto filename_field = std::string("filename=");
+        const auto utf8_filename_field = std::string("filename*=");
+        if (token.rfind(utf8_filename_field, 0) != std::string::npos) {
+            auto encoded = token.substr(utf8_filename_field.size());
+            // Encoding format: charset'language'encoded-value
+            auto first_quote = encoded.find('\'');
+            if (first_quote != std::string::npos) {
+                auto second_quote = encoded.find('\'', first_quote + 1);
+                if (second_quote != std::string::npos) {
+                    auto encoded_value = encoded.substr(second_quote + 1);
+                    // Unquote if needed.
+                    if (!encoded_value.empty() && encoded_value[0] == '"' && encoded_value.back() == '"') {
+                        encoded_value = encoded_value.substr(1, encoded_value.length() - 2);
+                    }
+                    decode_url(encoded_value);
+                    sanitize_filename(encoded_value);
+                    if (!encoded_value.empty()) {
+                        filename = encoded_value;
+                        break;
+                    }
+                }
+            }
+        } else if (token.rfind(filename_field, 0) != std::string::npos) {
+            token = token.substr(filename_field.size());
+            if (!token.empty() && token[0] == '"' && token.back() == '"') {
+                token = token.substr(1, token.length() - 2);
+            }
+            sanitize_filename(token);
+            if (!token.empty()) {
+                filename = token;
+            }
+        }
+    }
+
+    return filename;
+}
+
+size_t ParallelDownload::header_callback(void *buffer, size_t size, size_t nitems, void *userdata) {
     // Throwing outside from a C++ callback that is called by C code (libcurl) is UNDEFINED BEHAVIOUR.
     try {
-        auto handle = static_cast<DownloadHandle*>(userdata);
+        auto& opt = *static_cast<std::optional<DownloadInstance>*>(userdata);
+        auto& download = opt.value();
+    
+        if (!download.start_time.has_value()) {
+            download.start_time = std::optional{std::chrono::steady_clock::now()};
+            print_download_start(download.url);
+        }
+    
+        std::string header(static_cast<char*>(buffer), size * nitems);
+        auto delim = header.find(':');
+        if (delim != std::string::npos) {
+            auto key = header.substr(0, delim);
+            auto value = header.substr(delim + 1);
+            std::transform(
+                key.begin(),
+                key.end(),
+                key.begin(),
+                [] (unsigned char c) {
+                    return std::tolower(c);
+                }
+            );
+            if (key == "content-disposition") {
+                auto filename = parse_content_disposition(value);
+                if (filename.has_value()) {
+                    download.output_file_path.replace_filename(filename.value());
+                }
+            }
+        }
+        return size * nitems;
+    } catch (std::exception e) {
+        std::cerr << e.what() << '\n';
+        std::exit(EXIT_FAILURE);
+    } catch (...) {
+        std::exit(EXIT_FAILURE);
+    }
+}
 
-        if (!handle->out_file.is_open()) {
-            create_file(handle->out_file, handle->out_path);
+size_t ParallelDownload::write_callback(void *ptr, size_t size, size_t nmemb, void *userdata) {
+    // Throwing outside from a C++ callback that is called by C code (libcurl) is UNDEFINED BEHAVIOUR.
+    try {
+        auto& opt = *static_cast<std::optional<DownloadInstance>*>(userdata);
+        auto& download = opt.value();
+
+        if (!download.start_time.has_value()) {
+            download.start_time = std::chrono::steady_clock::now();
+            print_download_start(download.url);
+        }
+
+        if (!download.output_file.is_open()) {
+            create_file(download.output_file, download.output_file_path);
         }
 
         if (ptr != nullptr && nmemb * size != 0) {
-            handle->out_file.write(static_cast<char*>(ptr), nmemb * size);
+            download.output_file.write(static_cast<char*>(ptr), nmemb * size);
         }
 
         return nmemb * size;
@@ -336,7 +401,7 @@ static void decode_url(std::string& text) {
     }
 }
 
-static std::string filename_from_url(const std::string& url) {
+std::string ParallelDownload::filename_from_url(const std::string& url) {
     auto out = url.substr(0, url.find('#'));
     out = out.substr(0, out.find('?'));
     out = out.substr((std::min)(out.rfind('/') + 1, out.length()));
@@ -364,4 +429,44 @@ static void print_app_arguments(Arguments args) {
 
 static void print_app_usage(std::string command_name) {
     std::cerr << "Usage: " << command_name << " <urls_file> <out_dir> <parallel_download_count>\n";
+}
+
+static void print_download_error(const std::string& url, long http_code) {
+    std::cerr 
+        << "Error: Failed to obtain URL contents; Code: "
+        << http_code 
+        << "; URL: "
+        << url 
+        << '\n';
+}
+
+static void print_download_success(
+    const std::string& url,
+    const std::filesystem::path& output_file_path,
+    std::chrono::milliseconds elapsed
+) {
+    std::cout
+        << current_time_to_string()
+        << " " << output_file_path
+        << " - finished downloading in " << elapsed.count() << " ms"
+        << std::endl;
+}
+
+static void print_download_start(const std::string& url) {
+    std::cout
+        << current_time_to_string()
+        << " " << url
+        << " - started downloading"
+        << std::endl;
+}
+
+static void print_libcurl_crash() {
+    std::cerr 
+        << current_time_to_string()
+        << " internal libcurl error, crashing."
+        << '\n';
+}
+
+static void print_app_finish() {
+    std::cout << current_time_to_string() << " Url Downloader Finished" << std::endl;
 }
