@@ -12,6 +12,7 @@
 #include <ctime>
 #include <curl_easy.h>
 #include <curl_multi.h>
+#include <iomanip>
 
 /// Handle to manage an instance of downloading a file from URL.
 class DownloadHandle {
@@ -132,21 +133,19 @@ int main(int argc, char* argv[]) {
     return 0;
 }
 
+// Returns current time formated as "YYYY-MM-DD hh:mm:ss.sss".
 static std::string current_time_to_string() {
-    auto currentTime = std::chrono::system_clock::now();
-    const auto size = 80;
-    char buffer[size];
+    auto now = std::chrono::system_clock::now();
+    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
     
-    auto transformed = currentTime.time_since_epoch().count() / 1000000;
-    auto millis = transformed % 1000;
+    auto tt = std::chrono::system_clock::to_time_t(now);
+    auto tm = std::localtime(&tt);
+
+    auto oss = std::ostringstream();
+    oss << std::put_time(tm, "%F %H:%M:%S")
+        << '.' << std::setfill('0') << std::setw(3) << ms.count();
     
-    std::time_t tt = std::chrono::system_clock::to_time_t(currentTime);
-    auto timeinfo = std::localtime(&tt);
-    char tmp[size];  // sprintf() shall not read from and write into the same buffer (undefined behaviour).
-    std::strftime(tmp, size, "%F %H:%M:%S", timeinfo);
-    std::sprintf(buffer, "%s:%03d", tmp, static_cast<int>(millis));
-    
-    return std::string(buffer);
+    return oss.str();
 }
 
 /// Parses input file into url strings line by line. Empty lines are ignored.
