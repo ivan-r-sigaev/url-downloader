@@ -124,6 +124,7 @@ int main(int argc, char* argv[]) {
                         << " " << handle->out_path
                         << " - finished downloading in " << elapsed << " ms\n";
                 }
+                multi_handle.remove(*easy_handle);
             }
             std::cout << std::flush;
         }
