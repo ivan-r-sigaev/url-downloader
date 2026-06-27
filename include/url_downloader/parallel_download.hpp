@@ -19,13 +19,7 @@ public:
         std::filesystem::path _output_file_path,
         std::ofstream _output_file,
         std::optional<std::chrono::steady_clock::time_point> _start_time
-    ):
-        easy_handle(std::move(_easy_handle)),
-        url(std::move(_url)),
-        output_file_path(std::move(_output_file_path)),
-        output_file(std::move(_output_file)),
-        start_time(std::move(_start_time))
-    {}
+    );
     DownloadInstance(const DownloadInstance&) = delete;
     DownloadInstance& operator=(const DownloadInstance&) = delete;
     DownloadInstance(DownloadInstance&&) = default;
