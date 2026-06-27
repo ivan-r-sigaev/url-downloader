@@ -33,6 +33,7 @@ public:
     static void print_download_start(const std::string& url);
     static void print_url_skipped(const std::string& url);
     static void print_libcurl_crash();
+    static void print_callback_exception(std::exception e);
     static void print_app_finish();
 private:
     std::ostream& _out;

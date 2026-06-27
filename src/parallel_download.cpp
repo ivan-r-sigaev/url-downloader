@@ -67,6 +67,8 @@ static void simple_unquote(std::string& text) {
     }
 }
 
+// Tries to decode the filename from the value of the "Content-Disposition" http header.
+// "filename*=" has precedence over "filename=".
 static std::optional<std::string> parse_content_disposition(const std::string& value) {
     auto sstream = std::stringstream(value);
     auto token = std::string();
@@ -230,7 +232,7 @@ size_t ParallelDownload::header_callback(void *buffer, size_t size, size_t nitem
         }
         return size * nitems;
     } catch (std::exception e) {
-        std::cerr << e.what() << '\n';
+        Printer::print_callback_exception(e);
         std::exit(EXIT_FAILURE);
     } catch (...) {
         std::exit(EXIT_FAILURE);
@@ -258,7 +260,7 @@ size_t ParallelDownload::write_callback(void *ptr, size_t size, size_t nmemb, vo
 
         return nmemb * size;
     } catch (std::exception e) {
-        std::cerr << e.what() << '\n';
+        Printer::print_callback_exception(e);
         std::exit(EXIT_FAILURE);
     } catch (...) {
         std::exit(EXIT_FAILURE);

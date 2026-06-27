@@ -1,5 +1,6 @@
 #pragma once
 #include <filesystem>
+#include <optional>
 
 // Command line arguments for the program.
 class Arguments {
@@ -18,5 +19,5 @@ public:
         long _max_parallel_downloads
     );
     // Parses the arguments from the command line.
-    static Arguments parse(int argc, char* argv[]);
+    static std::optional<Arguments> parse(int argc, char* argv[]);
 };

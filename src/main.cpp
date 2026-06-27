@@ -7,7 +7,14 @@ static std::vector<std::string> read_urls(const std::filesystem::path& urls_path
 int main(int argc, char* argv[]) {
     Printer::print_app_start();
 
-    auto args = Arguments::parse(argc, argv);
+    auto opt = Arguments::parse(argc, argv);
+    if (!opt.has_value()) {
+        auto command_name = argc >= 1 ? argv[1] : "url_downloader";
+        Printer::print_app_usage(command_name);
+        std::exit(EXIT_FAILURE);
+    }
+    
+    auto args = opt.value();
     Printer::print_app_arguments(args);
 
     auto parallel_download = ParallelDownload();

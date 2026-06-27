@@ -6,10 +6,15 @@
 // Internal structure used by ParallelDownload to manage a single download connection.
 class DownloadInstance {
 public:
+    // Easy handle associated with the download.
     curl::curl_easy easy_handle;
+    // Url to download from.
     std::string url;
+    // Path to the file that is being downloaded.
     std::filesystem::path output_file_path;
+    // The file that is being downloaded.
     std::ofstream output_file;
+    // Exact time point when the download started.
     std::optional<std::chrono::steady_clock::time_point> start_time;
 public:
     // Explicit constructor.
