@@ -19,7 +19,7 @@ static void sanitize_filename(std::string& filename) {
 
 // Creates a opens the ofstream at given path.
 // If path already exists adds "(1)", "(2)" and so on to the filename.
-static void create_file(std::ofstream& fs, std::filesystem::path path) {
+static void create_file(std::ofstream& fs, std::filesystem::path& path) {
     int postfix = 1;
     std::string name = path.filename().string();
     size_t delim = name.rfind('.');
