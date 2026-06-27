@@ -29,6 +29,10 @@ std::optional<Arguments> Arguments::parse(int argc, char* argv[]) {
         return std::nullopt;
     }
 
+    if (!std::filesystem::exists(urls_file)) {
+        return std::nullopt;
+    }
+
     return Arguments(urls_file, output_directory, max_parallel_downloads);
 }
 

@@ -44,7 +44,15 @@ void print_app_arguments(Arguments args) {
 void print_app_usage(std::string command_name) {
     err()
         << current_time_to_string() 
-        << "Usage: " << command_name << " <urls_file> <out_dir> <parallel_download_count>" 
+        << " Usage: " << command_name << " <urls_file> <out_dir> <parallel_download_count>"
+        << std::endl;
+}
+
+void print_unable_to_create_output(const std::filesystem::path& output_directory) {
+    err()
+        << current_time_to_string()
+        << " Error: \"Unable to create output directory\""
+        << " Path: `" << output_directory << '`'
         << std::endl;
 }
 

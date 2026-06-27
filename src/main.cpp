@@ -17,6 +17,13 @@ int main(int argc, char* argv[]) {
     auto args = opt.value();
     print_app_arguments(args);
 
+    if (!std::filesystem::exists(args.output_directory)) {
+        if (!std::filesystem::create_directories(args.output_directory)) {
+            print_unable_to_create_output(args.output_directory);
+            std::exit(EXIT_FAILURE);
+        }
+    }
+
     auto parallel_download = ParallelDownload();
     for (const auto& url : read_urls(args.urls_file)) {
         parallel_download.add(url, args.output_directory);
