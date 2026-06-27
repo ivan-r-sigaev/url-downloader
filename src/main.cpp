@@ -9,7 +9,7 @@ int main(int argc, char* argv[]) {
 
     auto opt = Arguments::parse(argc, argv);
     if (!opt.has_value()) {
-        auto command_name = argc >= 1 ? argv[1] : "url_downloader";
+        auto command_name = argc >= 1 ? argv[0] : "url_downloader";
         print_app_usage(command_name);
         std::exit(EXIT_FAILURE);
     }
