@@ -95,13 +95,6 @@ void print_url_skipped(const std::string& url) {
         << std::endl;
 }
 
-void print_libcurl_crash() {
-    err() 
-        << current_time_to_string()
-        << " Error: \"internal libcurl error, crashing\""
-        << std::endl;
-}
-
 void print_app_finish() {
     out() 
         << current_time_to_string()

@@ -171,11 +171,6 @@ void ParallelDownload::perform(long max_parallel_downloads) {
             auto msg = result.get();
             if (msg->get_message() == CURLMSG_DONE) {
                 auto now = std::chrono::steady_clock::now();
-
-                if (msg->get_code() != CURLE_OK) {
-                    print_libcurl_crash();
-                    std::exit(EXIT_FAILURE);
-                }
                 
                 auto userdata = msg->get_handler()->get_info<CURLINFO_PRIVATE>().get();
                 auto& opt = *static_cast<std::optional<DownloadInstance>*>(userdata);

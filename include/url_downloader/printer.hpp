@@ -17,6 +17,5 @@ void print_download_success(
 );
 void print_download_start(const std::string& url);
 void print_url_skipped(const std::string& url);
-void print_libcurl_crash();
 void print_callback_exception(std::exception e);
 void print_app_finish();
