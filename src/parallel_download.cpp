@@ -62,7 +62,7 @@ static std::string filename_from_url(const std::string& url) {
 
 // Removes outer quotes from text if present.
 static void simple_unquote(std::string& text) {
-    if (!text.size() >= 2 && text[0] == '"' && text.back() == '"') {
+    if (text.size() >= 2 && text[0] == '"' && text.back() == '"') {
         text = text.substr(1, text.length() - 2);
     }
 }
