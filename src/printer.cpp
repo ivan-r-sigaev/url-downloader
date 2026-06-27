@@ -17,14 +17,22 @@ static std::string current_time_to_string() {
     return oss.str();
 }
 
-Printer::Printer() : _out(std::cout), _err(std::cerr) {}
-
-void Printer::print_app_start() {
-    Printer::out() << current_time_to_string() << " Url Downloader Started" << std::endl;
+// Normal output stream.
+static std::ostream& out() {
+    return std::cout;
 }
 
-void Printer::print_app_arguments(Arguments args) {
-    Printer::out()
+// Error output stream.
+static std::ostream& err() {
+    return std::cerr;
+}
+
+void print_app_start() {
+    out() << current_time_to_string() << " Url Downloader Started" << std::endl;
+}
+
+void print_app_arguments(Arguments args) {
+    out()
         << current_time_to_string()
         << " Arguments: { "
         << " urls-file-path: `" << args.urls_file << '`'
@@ -33,15 +41,15 @@ void Printer::print_app_arguments(Arguments args) {
         << " }" << std::endl;
 }
 
-void Printer::print_app_usage(std::string command_name) {
-    Printer::err()
+void print_app_usage(std::string command_name) {
+    err()
         << current_time_to_string() 
         << "Usage: " << command_name << " <urls_file> <out_dir> <parallel_download_count>" 
         << std::endl;
 }
 
-void Printer::print_download_error(const std::string& url, long http_code) {
-    Printer::err()
+void print_download_error(const std::string& url, long http_code) {
+    err()
         << current_time_to_string()
         << " Error: \"Failed to obtain URL contents\""
         << " Code: " << http_code 
@@ -50,12 +58,12 @@ void Printer::print_download_error(const std::string& url, long http_code) {
         << std::endl;
 }
 
-void Printer::print_download_success(
+void print_download_success(
     const std::string& url,
     const std::filesystem::path& output_file_path,
     std::chrono::milliseconds elapsed
 ) {
-    Printer::out()
+    out()
         << current_time_to_string()
         << " " << url
         << " - finished downloading in " << elapsed.count() << " ms"
@@ -63,53 +71,40 @@ void Printer::print_download_success(
         << std::endl;
 }
 
-void Printer::print_download_start(const std::string& url) {
-    Printer::out()
+void print_download_start(const std::string& url) {
+    out()
         << current_time_to_string()
         << " " << url
         << " - started downloading"
         << std::endl;
 }
 
-void Printer::print_url_skipped(const std::string& url) {
-    Printer::err()
+void print_url_skipped(const std::string& url) {
+    err()
         << current_time_to_string()
         << " Error: \"URL skipped: unknown protocol, must be HTTP/HTTPS\""
         << " Url: `" << url << '`'
         << std::endl;
 }
 
-void Printer::print_libcurl_crash() {
-    Printer::err() 
+void print_libcurl_crash() {
+    err() 
         << current_time_to_string()
         << " Error: \"internal libcurl error, crashing\""
         << std::endl;
 }
 
-void Printer::print_app_finish() {
-    Printer::out() 
+void print_app_finish() {
+    out() 
         << current_time_to_string()
         << " Url Downloader Finished"
         << std::endl;
 }
 
-void Printer::print_callback_exception(std::exception e) {
-    Printer::err()
+void print_callback_exception(std::exception e) {
+    err()
         << current_time_to_string()
         << " Error: \"A exception occured in libcurl callback function\""
         << " What: `" << e.what() << "`"
         << std::endl;
-}
-
-std::ostream& Printer::out() {
-    return Printer::get()._out;
-}
-
-std::ostream& Printer::err() {
-    return Printer::get()._err;
-}
-
-Printer& Printer::get() {
-    static auto instance = Printer();
-    return instance;
 }

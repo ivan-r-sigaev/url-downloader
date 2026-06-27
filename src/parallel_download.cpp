@@ -173,7 +173,7 @@ void ParallelDownload::perform(long max_parallel_downloads) {
                 auto now = std::chrono::steady_clock::now();
 
                 if (msg->get_code() != CURLE_OK) {
-                    Printer::print_libcurl_crash();
+                    print_libcurl_crash();
                     std::exit(EXIT_FAILURE);
                 }
                 
@@ -183,10 +183,10 @@ void ParallelDownload::perform(long max_parallel_downloads) {
 
                 auto http_code = download.easy_handle.get_info<CURLINFO_RESPONSE_CODE>().get();
                 if (http_code != 200) {
-                    Printer::print_download_error(download.url, http_code);
+                    print_download_error(download.url, http_code);
                 } else {
                     auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - download.start_time.value());
-                    Printer::print_download_success(download.url, download.output_file_path, elapsed);
+                    print_download_success(download.url, download.output_file_path, elapsed);
                 }
 
                 multi_handle.remove(download.easy_handle);
@@ -207,7 +207,7 @@ size_t ParallelDownload::header_callback(void *buffer, size_t size, size_t nitem
     
         if (!download.start_time.has_value()) {
             download.start_time = std::optional{std::chrono::steady_clock::now()};
-            Printer::print_download_start(download.url);
+            print_download_start(download.url);
         }
     
         std::string header(static_cast<char*>(buffer), size * nitems);
@@ -232,7 +232,7 @@ size_t ParallelDownload::header_callback(void *buffer, size_t size, size_t nitem
         }
         return size * nitems;
     } catch (std::exception e) {
-        Printer::print_callback_exception(e);
+        print_callback_exception(e);
         std::exit(EXIT_FAILURE);
     } catch (...) {
         std::exit(EXIT_FAILURE);
@@ -247,7 +247,7 @@ size_t ParallelDownload::write_callback(void *ptr, size_t size, size_t nmemb, vo
 
         if (!download.start_time.has_value()) {
             download.start_time = std::chrono::steady_clock::now();
-            Printer::print_download_start(download.url);
+            print_download_start(download.url);
         }
 
         if (!download.output_file.is_open()) {
@@ -260,7 +260,7 @@ size_t ParallelDownload::write_callback(void *ptr, size_t size, size_t nmemb, vo
 
         return nmemb * size;
     } catch (std::exception e) {
-        Printer::print_callback_exception(e);
+        print_callback_exception(e);
         std::exit(EXIT_FAILURE);
     } catch (...) {
         std::exit(EXIT_FAILURE);

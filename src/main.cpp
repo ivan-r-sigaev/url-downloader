@@ -5,17 +5,17 @@
 static std::vector<std::string> read_urls(const std::filesystem::path& urls_path);
 
 int main(int argc, char* argv[]) {
-    Printer::print_app_start();
+    print_app_start();
 
     auto opt = Arguments::parse(argc, argv);
     if (!opt.has_value()) {
         auto command_name = argc >= 1 ? argv[1] : "url_downloader";
-        Printer::print_app_usage(command_name);
+        print_app_usage(command_name);
         std::exit(EXIT_FAILURE);
     }
-    
+
     auto args = opt.value();
-    Printer::print_app_arguments(args);
+    print_app_arguments(args);
 
     auto parallel_download = ParallelDownload();
     for (const auto& url : read_urls(args.urls_file)) {
@@ -23,7 +23,7 @@ int main(int argc, char* argv[]) {
     }
     parallel_download.perform(args.max_parallel_downloads);
 
-    Printer::print_app_finish();
+    print_app_finish();
     return 0;
 }
 
@@ -41,7 +41,7 @@ static std::vector<std::string> read_urls(const std::filesystem::path& urls_path
         }
         // Skip non-HTTP/HTTPS protocols.
         if (line.rfind("https://", 0) != 0 && line.rfind("http://", 0) != 0) {
-            Printer::print_url_skipped(line);
+            print_url_skipped(line);
             continue;
         }
         // Trim trailing whitespace
