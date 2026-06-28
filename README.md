@@ -24,7 +24,7 @@ All dependencies are automatically built into the executable by CMake.
 List of dependencies:
 
 - libcurl 8.8.0: https://github.com/curl/curl/releases/tag/curl-8_8_0
-- curlcpp latest (3.1): https://github.com/JosephP91/curlcpp
+- curlcpp: https://github.com/JosephP91/curlcpp/tree/cea6852eb24a7a03d524d61ea6687c3f0e987bfd
 
 ## Building from source
 
