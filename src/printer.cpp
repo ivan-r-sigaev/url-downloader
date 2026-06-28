@@ -31,7 +31,7 @@ void print_app_start() {
     out() << current_time_to_string() << " Url Downloader Started" << std::endl;
 }
 
-void print_app_arguments(Arguments args) {
+void print_app_arguments(const Arguments& args) {
     out()
         << current_time_to_string()
         << " Arguments: { "
@@ -41,7 +41,7 @@ void print_app_arguments(Arguments args) {
         << " }" << std::endl;
 }
 
-void print_app_usage(std::string command_name) {
+void print_app_usage(const std::string& command_name) {
     err()
         << current_time_to_string() 
         << " Usage: " << command_name << " <urls_file> <out_dir> <parallel_download_count>"
@@ -69,7 +69,7 @@ void print_download_error(const std::string& url, long http_code) {
 void print_download_success(
     const std::string& url,
     const std::filesystem::path& output_file_path,
-    std::chrono::milliseconds elapsed
+    const std::chrono::milliseconds& elapsed
 ) {
     out()
         << current_time_to_string()
@@ -102,7 +102,7 @@ void print_app_finish() {
         << std::endl;
 }
 
-void print_callback_exception(std::exception e) {
+void print_callback_exception(const std::exception& e) {
     err()
         << current_time_to_string()
         << " Error: \"A exception occured in libcurl callback function\""
