@@ -44,7 +44,7 @@ void print_app_arguments(const Arguments& args) {
 void print_app_usage(const std::string& command_name) {
     err()
         << current_time_to_string() 
-        << " Usage: " << command_name << " <urls_file> <out_dir> <parallel_download_count>"
+        << " Usage: " << command_name << " <urls-file-path> <ouput-direcotry-path> <max-parallel-downloads>"
         << std::endl;
 }
 

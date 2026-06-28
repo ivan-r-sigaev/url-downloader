@@ -3,23 +3,25 @@
 [![Build Status](https://github.com/ivan-r-sigaev/url-downloader/actions/workflows/ci.yml/badge.svg)](https://github.com/ivan-r-sigaev/url-downloader/actions)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 
-A simple command line tool to download multiple files from a list of urls.
+A command-line tool that can download files from several urls at once. 
+
+**This is a reference implementation that exists only for demonstrative purposes.**
 
 ## Usage
 
 Run program like so:
 
 ```
-url-downloader <urls_file> <out_dir> <parallel_download_count>
+url-downloader <urls-file-path> <ouput-direcotry-path> <max-parallel-downloads>
 ```
 where:
-- `<urls_file>` - path to text file containing newline separated urls to download.
-- `<out_dir>` - path to directory to download files into.
-- `<parallel_download_count>` - maximum allowed number of concurrent downloads. 
+- `<urls-file-path>` - path to the text file containing newline separated urls to be downloaded.
+- `<ouput-direcotry-path>` - path to the directory to download files into (will be created if does not exist).
+- `<max-parallel-downloads>` - maximum allowed number of concurrent downloads.
 
 ## Dependencies
 
-All dependencies are automatically built into the executable by CMake.
+All dependencies are automatically fetched and included into the project by CMake at build time.
 
 List of dependencies:
 
@@ -42,3 +44,14 @@ cmake ..
 # Build the executable
 cmake --build . --config Release --parallel
 ```
+
+## What I learned
+
+The purpose of this tool was to implement downloading files over network using C++17. During development I:
+
+- Learned how to use [libcurl](https://github.com/curl/curl) for basic download operations.
+- Learned how to use libcurl C++ wrappers such as [curlcpp](https://github.com/JosephP91/curlcpp).
+- Opened several bug issues in [curlcpp](https://github.com/JosephP91/curlcpp)'s repository to help develop the project (see [first issue](https://github.com/JosephP91/curlcpp/issues/165), [second issue](https://github.com/JosephP91/curlcpp/issues/167)).
+- Opened a pull request ([see](https://github.com/JosephP91/curlcpp/pull/166)) to fix an issue and had it successfully merged.
+- Create a [GitHub Actions CI script](./.github/workflows/ci.yml) to automatically verify that the project's code successfully compiles for both Windows and Linux.
+- Used branch protection to ensure that the main branch only has vaild code.
