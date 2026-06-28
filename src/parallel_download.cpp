@@ -19,7 +19,7 @@ static void sanitize_filename(std::string& filename) {
 
 // Creates a opens the ofstream at given path.
 // If path already exists adds "(1)", "(2)" and so on to the filename.
-static void create_file(std::ofstream& fs, std::filesystem::path path) {
+static void create_file(std::ofstream& fs, std::filesystem::path& path) {
     int postfix = 1;
     std::string name = path.filename().string();
     size_t delim = name.rfind('.');
@@ -59,6 +59,71 @@ static std::string filename_from_url(const std::string& url) {
     }
     return out;
 }
+
+// Removes outer quotes from text if present.
+static void simple_unquote(std::string& text) {
+    if (text.size() >= 2 && text[0] == '"' && text.back() == '"') {
+        text = text.substr(1, text.length() - 2);
+    }
+}
+
+// Tries to decode the filename from the value of the "Content-Disposition" http header.
+// "filename*=" has precedence over "filename=".
+static std::optional<std::string> parse_content_disposition(const std::string& value) {
+    auto sstream = std::stringstream(value);
+    auto token = std::string();
+    std::optional<std::string> filename = std::nullopt;
+
+    while (std::getline(sstream, token, ';')) {
+        const auto whitespace = " \t";
+        token = token.substr(token.find_first_not_of(whitespace));
+        const auto filename_field = std::string("filename=");
+        const auto utf8_filename_field = std::string("filename*=");
+        if (token.rfind(utf8_filename_field, 0) != std::string::npos) {
+            auto encoded = token.substr(utf8_filename_field.size());
+            // Encoding format: charset'language'encoded-name
+            auto x1 = encoded.find('\'');
+            if (x1 == std::string::npos) {
+                continue;
+            }
+            auto x2 = encoded.find('\'', x1 + 1);
+            if (x2 == std::string::npos) {
+                continue;
+            }
+            auto value = encoded.substr(x2 + 1);
+            simple_unquote(value);
+            decode_url(value);
+            sanitize_filename(value);
+            if (!value.empty()) {
+                filename = value;
+                break;
+            }
+        } else if (token.rfind(filename_field, 0) != std::string::npos) {
+            auto value = token.substr(filename_field.size());
+            simple_unquote(value);
+            sanitize_filename(value);
+            if (!value.empty()) {
+                filename = value;
+            }
+        }
+    }
+
+    return filename;
+}
+
+DownloadInstance::DownloadInstance(
+    curl::curl_easy _easy_handle,
+    std::string _url,
+    std::filesystem::path _output_file_path,
+    std::ofstream _output_file,
+    std::optional<std::chrono::steady_clock::time_point> _start_time
+):
+    easy_handle(std::move(_easy_handle)),
+    url(std::move(_url)),
+    output_file_path(std::move(_output_file_path)),
+    output_file(std::move(_output_file)),
+    start_time(std::move(_start_time))
+{}
 
 void ParallelDownload::add(const std::string& url, const std::filesystem::path& output_directory) {
     auto output_file_path = output_directory;
@@ -106,11 +171,6 @@ void ParallelDownload::perform(long max_parallel_downloads) {
             auto msg = result.get();
             if (msg->get_message() == CURLMSG_DONE) {
                 auto now = std::chrono::steady_clock::now();
-
-                if (msg->get_code() != CURLE_OK) {
-                    Printer::print_libcurl_crash();
-                    std::exit(EXIT_FAILURE);
-                }
                 
                 auto userdata = msg->get_handler()->get_info<CURLINFO_PRIVATE>().get();
                 auto& opt = *static_cast<std::optional<DownloadInstance>*>(userdata);
@@ -118,10 +178,10 @@ void ParallelDownload::perform(long max_parallel_downloads) {
 
                 auto http_code = download.easy_handle.get_info<CURLINFO_RESPONSE_CODE>().get();
                 if (http_code != 200) {
-                    Printer::print_download_error(download.url, http_code);
+                    print_download_error(download.url, http_code);
                 } else {
                     auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - download.start_time.value());
-                    Printer::print_download_success(download.url, download.output_file_path, elapsed);
+                    print_download_success(download.url, download.output_file_path, elapsed);
                 }
 
                 multi_handle.remove(download.easy_handle);
@@ -134,51 +194,6 @@ void ParallelDownload::perform(long max_parallel_downloads) {
     this->downloads.shrink_to_fit();
 }
 
-static std::optional<std::string> parse_content_disposition(const std::string& value) {
-    auto sstream = std::stringstream(value);
-    auto token = std::string();
-    std::optional<std::string> filename = std::nullopt;
-
-    while (std::getline(sstream, token, ';')) {
-        const auto whitespace = " \t";
-        token = token.substr(token.find_first_not_of(whitespace));
-        const auto filename_field = std::string("filename=");
-        const auto utf8_filename_field = std::string("filename*=");
-        if (token.rfind(utf8_filename_field, 0) != std::string::npos) {
-            auto encoded = token.substr(utf8_filename_field.size());
-            // Encoding format: charset'language'encoded-value
-            auto first_quote = encoded.find('\'');
-            if (first_quote != std::string::npos) {
-                auto second_quote = encoded.find('\'', first_quote + 1);
-                if (second_quote != std::string::npos) {
-                    auto encoded_value = encoded.substr(second_quote + 1);
-                    // Unquote if needed.
-                    if (!encoded_value.empty() && encoded_value[0] == '"' && encoded_value.back() == '"') {
-                        encoded_value = encoded_value.substr(1, encoded_value.length() - 2);
-                    }
-                    decode_url(encoded_value);
-                    sanitize_filename(encoded_value);
-                    if (!encoded_value.empty()) {
-                        filename = encoded_value;
-                        break;
-                    }
-                }
-            }
-        } else if (token.rfind(filename_field, 0) != std::string::npos) {
-            token = token.substr(filename_field.size());
-            if (!token.empty() && token[0] == '"' && token.back() == '"') {
-                token = token.substr(1, token.length() - 2);
-            }
-            sanitize_filename(token);
-            if (!token.empty()) {
-                filename = token;
-            }
-        }
-    }
-
-    return filename;
-}
-
 size_t ParallelDownload::header_callback(void *buffer, size_t size, size_t nitems, void *userdata) {
     // Throwing outside from a C++ callback that is called by C code (libcurl) is UNDEFINED BEHAVIOUR.
     try {
@@ -187,7 +202,7 @@ size_t ParallelDownload::header_callback(void *buffer, size_t size, size_t nitem
     
         if (!download.start_time.has_value()) {
             download.start_time = std::optional{std::chrono::steady_clock::now()};
-            Printer::print_download_start(download.url);
+            print_download_start(download.url);
         }
     
         std::string header(static_cast<char*>(buffer), size * nitems);
@@ -212,7 +227,7 @@ size_t ParallelDownload::header_callback(void *buffer, size_t size, size_t nitem
         }
         return size * nitems;
     } catch (std::exception e) {
-        std::cerr << e.what() << '\n';
+        print_callback_exception(e);
         std::exit(EXIT_FAILURE);
     } catch (...) {
         std::exit(EXIT_FAILURE);
@@ -227,7 +242,7 @@ size_t ParallelDownload::write_callback(void *ptr, size_t size, size_t nmemb, vo
 
         if (!download.start_time.has_value()) {
             download.start_time = std::chrono::steady_clock::now();
-            Printer::print_download_start(download.url);
+            print_download_start(download.url);
         }
 
         if (!download.output_file.is_open()) {
@@ -240,7 +255,7 @@ size_t ParallelDownload::write_callback(void *ptr, size_t size, size_t nmemb, vo
 
         return nmemb * size;
     } catch (std::exception e) {
-        std::cerr << e.what() << '\n';
+        print_callback_exception(e);
         std::exit(EXIT_FAILURE);
     } catch (...) {
         std::exit(EXIT_FAILURE);

@@ -12,17 +12,26 @@ Arguments::Arguments(
     max_parallel_downloads(std::move(_max_parallel_downloads))
 {}
 
-Arguments Arguments::parse(int argc, char* argv[]) {
-    std::string command_name = argc >= 1 ? std::string(argv[0]) : "url_downloader";
-
+std::optional<Arguments> Arguments::parse(int argc, char* argv[]) {
     if (argc < 4) {
-        Printer::print_app_usage(command_name);
-        std::exit(EXIT_FAILURE);
+        return std::nullopt;
+    }
+    
+    std::filesystem::path urls_file;
+    std::filesystem::path output_directory;
+    long max_parallel_downloads;
+
+    try {
+        urls_file = std::filesystem::path(argv[1]);
+        output_directory = std::filesystem::path(argv[2]);
+        max_parallel_downloads = std::stol(std::string(argv[3]));
+    } catch (std::exception e) {
+        return std::nullopt;
     }
 
-    auto urls_file = std::filesystem::path(argv[1]);
-    auto output_directory = std::filesystem::path(argv[2]);
-    auto max_parallel_downloads = std::stol(std::string(argv[3]));
+    if (!std::filesystem::exists(urls_file)) {
+        return std::nullopt;
+    }
 
     return Arguments(urls_file, output_directory, max_parallel_downloads);
 }

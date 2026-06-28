@@ -1,5 +1,6 @@
 #pragma once
 #include <filesystem>
+#include <optional>
 
 // Command line arguments for the program.
 class Arguments {
@@ -11,12 +12,13 @@ public:
     // Maximal allowed amount of concurrent download connections.
     long max_parallel_downloads;
 public:
+    // Parses the arguments from the command line.
+    static std::optional<Arguments> parse(int argc, char* argv[]);
+    
     // Explicit constructor.
     explicit Arguments(
         std::filesystem::path _urls_file,
         std::filesystem::path _output_directory,
         long _max_parallel_downloads
     );
-    // Parses the arguments from the command line.
-    static Arguments parse(int argc, char* argv[]);
 };
